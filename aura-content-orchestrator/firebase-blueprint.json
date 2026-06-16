@@ -1,0 +1,79 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Application user profile",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email"]
+    },
+    "GeoStrategy": {
+      "title": "GEO Strategy",
+      "description": "A generated GEO strategy with channel recommendations and metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "domain": { "type": "string" },
+        "goal": { "type": "string" },
+        "persona": { "type": "string" },
+        "coreMessage": { "type": "string" },
+        "title": { "type": "string" },
+        "summary": { "type": "string" },
+        "category": { "type": "string" },
+        "strategy": {
+          "type": "object",
+          "properties": {
+            "why": { "type": "string" },
+            "how": { "type": "string" },
+            "what": { "type": "string" }
+          }
+        },
+        "recommendations": {
+          "type": "object",
+          "properties": {
+            "onSite": { "type": "array", "items": { "type": "string" } },
+            "technicalSEO": { "type": "array", "items": { "type": "string" } },
+            "offPageSEO": { "type": "array", "items": { "type": "string" } },
+            "community": {
+              "type": "object",
+              "properties": {
+                "reddit": { "type": "array", "items": { "type": "string" } },
+                "forums": { "type": "array", "items": { "type": "string" } }
+              }
+            },
+            "outreach": {
+              "type": "object",
+              "properties": {
+                "blogs": { "type": "array", "items": { "type": "string" } },
+                "influencers": { "type": "array", "items": { "type": "string" } }
+              }
+            },
+            "multimedia": { "type": "array", "items": { "type": "string" } },
+            "tools": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "language": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "summary"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/content_ideas/{ideaId}": {
+      "schema": "GeoStrategy",
+      "description": "Generated GEO strategies"
+    }
+  }
+}
