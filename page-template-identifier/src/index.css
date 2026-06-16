@@ -1,0 +1,41 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+
+  --color-bg: #F8F9FB;
+  --color-sidebar: #FFFFFF;
+  --color-border: #E2E8F0;
+  --color-text-main: #1E293B;
+  --color-text-muted: #64748B;
+  --color-accent: #2563EB;
+  --color-accent-light: #EFF6FF;
+  --color-schema-bg: #F1F5F9;
+  --color-success: #059669;
+}
+
+@layer base {
+  body {
+    @apply bg-bg text-text-main font-sans antialiased;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-sans font-bold text-text-main;
+  }
+}
+
+@layer components {
+  .stat-card {
+    @apply p-4 border border-border rounded-lg bg-white shadow-sm transition-all hover:shadow-md;
+  }
+  
+  .schema-tag {
+    @apply inline-flex items-center bg-schema-bg px-2.5 py-1 rounded-md text-[13px] font-medium text-text-main;
+  }
+  
+  .url-pattern {
+    @apply font-mono text-[12px] text-accent bg-accent-light px-1.5 py-0.5 rounded border border-accent/10;
+  }
+}
