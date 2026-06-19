@@ -33,6 +33,8 @@ export default function App() {
   const [showHistory, setShowHistory] = useState(false);
   const [batchTasks, setBatchTasks] = useState<AuditTask[]>([]);
   const [activeTab, setActiveTab] = useState("manual");
+  const [currentUrl, setCurrentUrl] = useState<string>("");
+  const [currentTemplate, setCurrentTemplate] = useState<string>("");
 
   useEffect(() => {
     const savedHistory = localStorage.getItem("audit_history");
@@ -68,7 +70,12 @@ export default function App() {
         const extractionResponse = await axios.post("/api/extract", { url: data.value.trim() });
         htmlToAudit = extractionResponse.data.fullContent;
         targetUrl = data.value.trim();
+        setCurrentUrl(targetUrl);
+      } else {
+        setCurrentUrl("Pasted HTML Snip");
       }
+      
+      setCurrentTemplate(data.typeOverride || "WebPage");
 
       const auditResult = await auditSchema(htmlToAudit, targetUrl, data.typeOverride, data.gscIssues);
       setResult(auditResult);
@@ -113,6 +120,14 @@ export default function App() {
       setShowHistory(false);
       setActiveTab("manual");
       setBatchTasks([]);
+      
+      const urlRegex = /^(https?:\/\/[^\s]+)$/;
+      if (item.displayName && urlRegex.test(item.displayName)) {
+        setCurrentUrl(item.displayName);
+      } else {
+        setCurrentUrl("Historical Run");
+      }
+      setCurrentTemplate("WebPage");
     } else if (item.type === "batch" && item.tasks) {
       setBatchTasks(item.tasks);
       setResult(null);
@@ -275,8 +290,10 @@ export default function App() {
                     initialTasks={batchTasks}
                     onBatchProcessed={setBatchTasks} 
                     onBatchComplete={handleBatchComplete}
-                    onViewResult={(res, currentTasks) => {
-                      setResult(res);
+                    onViewResult={(task, currentTasks) => {
+                      setResult(task.result!);
+                      setCurrentUrl(task.url);
+                      setCurrentTemplate(task.templateName);
                       if (currentTasks && currentTasks.length > 0) {
                         setBatchTasks(currentTasks);
                       }
@@ -329,7 +346,11 @@ export default function App() {
 
             {result && !isLoading && (
               <div className="animate-in fade-in slide-in-from-bottom-8 duration-1000">
-                <Dashboard result={result} />
+                <Dashboard 
+                  result={result} 
+                  url={currentUrl} 
+                  templateName={currentTemplate} 
+                />
                 <SchemaEditor 
                   schema={result.perfectedSchema} 
                   recommendations={result.additionalRecommendedSchema}

@@ -15,8 +15,10 @@ import {
   Eye,
   Link2,
   Plus,
-  Trash2
+  Trash2,
+  Copy
 } from "lucide-react";
+import { copyTaskToClipboard } from "../utils/reportGenerator";
 import {
   Tooltip,
   TooltipContent,
@@ -30,7 +32,7 @@ interface BatchProcessorProps {
   initialTasks?: AuditTask[];
   onBatchProcessed: (tasks: AuditTask[]) => void;
   onBatchComplete: (tasks: AuditTask[]) => void;
-  onViewResult: (result: AuditResult, currentTasks: AuditTask[]) => void;
+  onViewResult: (task: AuditTask, currentTasks: AuditTask[]) => void;
 }
 
 export interface AuditTask {
@@ -50,7 +52,16 @@ export default function BatchProcessor({ initialTasks = [], onBatchProcessed, on
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [urlInput, setUrlInput] = useState("");
   const [currentTaskIndex, setCurrentTaskIndex] = useState<number | null>(null);
+  const [copiedTaskId, setCopiedTaskId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleCopyTask = async (task: AuditTask) => {
+    const success = await copyTaskToClipboard(task);
+    if (success) {
+      setCopiedTaskId(task.id);
+      setTimeout(() => setCopiedTaskId(null), 2000);
+    }
+  };
 
   useEffect(() => {
     if (!isRunning && initialTasks && initialTasks.length > 0) {
@@ -344,7 +355,7 @@ export default function BatchProcessor({ initialTasks = [], onBatchProcessed, on
               <Button 
                 variant="ghost" 
                 onClick={clearTasks}
-                className="text-[10px] uppercase font-bold tracking-widest hover:text-red-500 flex items-center gap-2"
+                className="text-[10px] uppercase font-bold tracking-widest hover:text-red-500 flex items-center gap-2 font-semibold"
                 disabled={isRunning}
               >
                 <Trash2 className="w-3 h-3" />
@@ -412,15 +423,31 @@ export default function BatchProcessor({ initialTasks = [], onBatchProcessed, on
                     <td className="py-5 px-4 text-right min-w-[120px]">
                       <div className="flex justify-end items-center gap-2">
                         {task.result && (
-                          <Button 
-                            variant="default" 
-                            size="sm" 
-                            onClick={() => onViewResult(task.result!, tasks)}
-                            className="h-8 bg-ice-melt/20 hover:bg-navy text-navy hover:text-white transition-all gap-2 px-4 rounded-xl border border-ice-melt/50 shadow-sm"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                            <span className="text-[10px] uppercase font-bold tracking-wider">Inspect</span>
-                          </Button>
+                          <>
+                            <Button 
+                              variant="default" 
+                              size="sm" 
+                              onClick={() => onViewResult(task, tasks)}
+                              className="h-8 bg-ice-melt/20 hover:bg-navy text-navy hover:text-white transition-all gap-2 px-4 rounded-xl border border-ice-melt/50 shadow-sm"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              <span className="text-[10px] uppercase font-bold tracking-wider">Inspect</span>
+                            </Button>
+                            
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => handleCopyTask(task)}
+                              title="Copy Individual Report"
+                              className={`h-8 w-8 hover:bg-slate-50 transition-all rounded-xl border border-slate-200 flex items-center justify-center shrink-0 ${copiedTaskId === task.id ? "bg-emerald-50 border-emerald-300 text-emerald-600 hover:bg-emerald-50" : "text-slate-500 hover:text-navy"}`}
+                            >
+                              {copiedTaskId === task.id ? (
+                                <CheckCircle className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
+                              ) : (
+                                <Copy className="w-3.5 h-3.5" />
+                              )}
+                            </Button>
+                          </>
                         )}
                         {task.status === "error" && (
                           <Tooltip>

@@ -50,6 +50,7 @@ export default function InputSection({ onAnalyze, isLoading, isCollapsed: initia
   const [showGsc, setShowGsc] = useState(false);
   const [jsonCopied, setJsonCopied] = useState(false);
   const [textCopied, setTextCopied] = useState(false);
+  const [htmlCopied, setHtmlCopied] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(initialCollapsed);
 
   // Auto-collapse when a result is present (controlled by prop)
@@ -82,6 +83,13 @@ export default function InputSection({ onAnalyze, isLoading, isCollapsed: initia
     navigator.clipboard.writeText(code);
     setTextCopied(true);
     setTimeout(() => setTextCopied(false), 2000);
+  };
+
+  const copyHtmlTip = () => {
+    const code = `copy(document.documentElement.outerHTML);`;
+    navigator.clipboard.writeText(code);
+    setHtmlCopied(true);
+    setTimeout(() => setHtmlCopied(false), 2000);
   };
 
   return (
@@ -329,6 +337,48 @@ export default function InputSection({ onAnalyze, isLoading, isCollapsed: initia
                             {jsonCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                           </Button>
                         </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-white/60 backdrop-blur-xl border border-navy/10 p-8 rounded-2xl text-navy space-y-6 shadow-lg shadow-navy/5">
+                      <div className="flex items-center gap-3 text-navy">
+                        <div className="bg-navy/10 p-2 rounded-lg">
+                          <Lightbulb className="w-5 h-5 text-navy" />
+                        </div>
+                        <h3 className="font-heading font-bold uppercase tracking-wider text-sm">Architect's Tip: Rendered DOM</h3>
+                      </div>
+                      
+                      <div className="space-y-4">
+                        <p className="text-sm font-bold leading-tight">Extract JavaScript-Hydrated HTML</p>
+                        
+                        <div className="space-y-3 text-xs opacity-80 leading-relaxed">
+                          <p className="flex gap-2">
+                            <span className="text-navy font-bold">01</span>
+                            <span>For pages using client-side frameworks, Tag Managers (GTM) or dynamically injected elements.</span>
+                          </p>
+                          <p className="flex gap-2">
+                            <span className="text-navy font-bold">02</span>
+                            <span>Run this command in the browser <span className="text-navy font-medium">Console</span> to copy the true rendered DOM:</span>
+                          </p>
+                        </div>
+
+                        <div className="relative group/code">
+                          <pre className="bg-navy/95 p-4 rounded-xl text-[10px] font-mono text-ice-melt overflow-x-auto border border-white/5 leading-normal">
+                            copy(document.documentElement.outerHTML);
+                          </pre>
+                          <Button 
+                            size="icon" 
+                            variant="ghost" 
+                            onClick={copyHtmlTip}
+                            className="absolute top-2 right-2 h-8 w-8 text-ice-melt hover:bg-white/10 rounded-lg opacity-0 group-hover/code:opacity-100 transition-opacity"
+                          >
+                            {htmlCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                          </Button>
+                        </div>
+                        
+                        <p className="text-[10px] text-navy/60 italic leading-tight">
+                          * Captures dynamic structures (Product, Offers, Reviews) not visible in the initial static page source.
+                        </p>
                       </div>
                     </div>
 

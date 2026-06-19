@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { AuditResult } from "@/src/services/gemini";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { 
   AlertCircle, 
   CheckCircle2, 
@@ -14,16 +15,213 @@ import {
   ChevronDown,
   ChevronUp,
   XCircle,
-  Compass
+  Compass,
+  Copy,
+  Check,
+  BookOpen,
+  ExternalLink,
+  Library,
+  FileText
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import { copyTaskToClipboard } from "../utils/reportGenerator";
+
+const SCHEMA_DICTIONARY: Record<string, {
+  url: string;
+  description: string;
+  category: "E-Commerce" | "Corporate & Local" | "Site Structure" | "Creative & Social" | "General";
+  keyProperties: string[];
+  tips: string;
+}> = {
+  Product: {
+    url: "https://schema.org/Product",
+    description: "Represents any offered product or service, from physical goods to digital downloads and tickets.",
+    category: "E-Commerce",
+    keyProperties: ["name", "image", "description", "offers", "brand", "gtin", "mpn", "review", "aggregateRating"],
+    tips: "Google Rich Results require either 'offers', 'review', or 'aggregateRating'. Ensure price is format-valid (decimal without currency symbols)."
+  },
+  MerchantReturnPolicy: {
+    url: "https://schema.org/MerchantReturnPolicy",
+    description: "Specifies the merchant's return policies and conditions under which products can be returned and refunded.",
+    category: "E-Commerce",
+    keyProperties: ["returnFees", "returnMethod", "merchantReturnDays", "returnPolicyCategory", "merchantReturnLink"],
+    tips: "Critical for Google Merchant Center / Merchant Listings. Place inside your OfferShippingDetails structure or parent Organization."
+  },
+  Offer: {
+    url: "https://schema.org/Offer",
+    description: "An offer to transfer some rights to an item or to provide a service (e.g., to sell a product, rent a car, or stream a video).",
+    category: "E-Commerce",
+    keyProperties: ["price", "priceCurrency", "availability", "priceValidUntil", "url", "seller"],
+    tips: "Price must be a number (represented as string). 'availability' should use valid schema URLs like 'https://schema.org/InStock'."
+  },
+  AggregateRating: {
+    url: "https://schema.org/AggregateRating",
+    description: "The average rating of something based on a collection of reviews or ratings.",
+    category: "E-Commerce",
+    keyProperties: ["ratingValue", "reviewCount", "bestRating", "worstRating"],
+    tips: "Google enforces that 'ratingValue' and 'reviewCount' are actual numbers. Always make sure reviews refer to an actual item."
+  },
+  Review: {
+    url: "https://schema.org/Review",
+    description: "A review of an item, like a restaurant, movie, book, or physical product.",
+    category: "Creative & Social",
+    keyProperties: ["author", "reviewBody", "reviewRating", "datePublished", "itemReviewed"],
+    tips: "Requires a nested Author (Person or Organization) and a ReviewRating with numeric ratingValue."
+  },
+  LocalBusiness: {
+    url: "https://schema.org/LocalBusiness",
+    description: "A physical business or branch of an organization, such as a restaurant, medical practice, store, or office.",
+    category: "Corporate & Local",
+    keyProperties: ["name", "address", "telephone", "image", "openingHoursSpecification", "geo", "priceRange"],
+    tips: "Combine with GeoCoordinates for local map prominence. Opening hours must use two-letter day codes (e.g. 'Mo-Fr')."
+  },
+  Organization: {
+    url: "https://schema.org/Organization",
+    description: "A school, NGO, corporation, club, governmental agency, or other unified legal or social entity.",
+    category: "Corporate & Local",
+    keyProperties: ["name", "url", "logo", "sameAs", "address", "legalName", "leiCode"],
+    tips: "Establish nested identity anchors using '@id: \"#organization\"'. Use 'sameAs' to link with Wikidata or Wikipedia for strong entity graphs."
+  },
+  WebSite: {
+    url: "https://schema.org/WebSite",
+    description: "A set of related web pages and other items typically served from a single web domain.",
+    category: "Site Structure",
+    keyProperties: ["name", "url", "potentialAction", "target", "query-input"],
+    tips: "Target on homepages with 'Sitelinks Searchbox' markup to trigger Google's inline site-specific search box."
+  },
+  WebPage: {
+    url: "https://schema.org/WebPage",
+    description: "A web page. Every web page is implicitly assumed to be of type WebPage, holding core metadata about the document.",
+    category: "Site Structure",
+    keyProperties: ["name", "description", "breadcrumb", "publisher", "mainEntity"],
+    tips: "Set 'mainEntity' pointing to the primary item (e.g., Product or Article) of the page to clearly separate content from container."
+  },
+  BreadcrumbList: {
+    url: "https://schema.org/BreadcrumbList",
+    description: "An item list consisting of a chain of linked web pages, illustrating the site directory structure.",
+    category: "Site Structure",
+    keyProperties: ["itemListElement", "position", "item", "name"],
+    tips: "Ensure positions start at 1, increment sequentially, and include both 'name' and absolute 'item' URLs for all crumbs in the sequence."
+  },
+  SoftwareApplication: {
+    url: "https://schema.org/SoftwareApplication",
+    description: "A software application designed for mobile, desktop, or web platform execution.",
+    category: "Creative & Social",
+    keyProperties: ["name", "operatingSystem", "applicationCategory", "downloadUrl", "offers"],
+    tips: "Always include 'operatingSystem' (e.g., 'iOS, Android') and populate 'downloadUrl' with play/app store links when applicable."
+  },
+  FAQPage: {
+    url: "https://schema.org/FAQPage",
+    description: "A web page presenting one or more Frequently Asked Questions (FAQs) mapped to structured answer blocks.",
+    category: "Site Structure",
+    keyProperties: ["mainEntity", "question", "acceptedAnswer", "text"],
+    tips: "Answers must contain valid HTML in the 'text' property and must match the on-page visible content identically."
+  },
+  Article: {
+    url: "https://schema.org/Article",
+    description: "An article, such as a news report, scholarly publication, or blog post.",
+    category: "Creative & Social",
+    keyProperties: ["headline", "image", "datePublished", "dateModified", "author", "publisher"],
+    tips: "Google requires 'headline' to be under 110 characters, and recommended high-resolution promotional image assets (e.g., 16x9 aspect ratio)."
+  }
+};
+
+const markdownComponents = {
+  a: ({ node, ...props }: any) => <a target="_blank" rel="noopener noreferrer" {...props} />
+};
 
 interface DashboardProps {
   result: AuditResult;
+  url?: string;
+  templateName?: string;
 }
 
-export default function Dashboard({ result }: DashboardProps) {
+export default function Dashboard({ result, url, templateName }: DashboardProps) {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+  const [copied, setCopied] = useState(false);
+  const [selectedSchemaType, setSelectedSchemaType] = useState<string | null>(null);
+
+  // Extract all unique schema types referenced in detected data and recommendations
+  const allSchemaTypes = useMemo(() => {
+    const typesSet = new Set<string>();
+    
+    // Add from detected structured data
+    if (result.detectedStructuredData) {
+      result.detectedStructuredData.forEach(section => {
+        // Map common Google RRT names to official Schema.org types
+        let name = section.name;
+        if (name.toLowerCase().includes("product")) {
+          typesSet.add("Product");
+        } else if (name.toLowerCase().includes("merchant")) {
+          typesSet.add("MerchantReturnPolicy");
+          typesSet.add("Offer");
+        } else if (name.toLowerCase().includes("breadcrumb")) {
+          typesSet.add("BreadcrumbList");
+        } else if (name.toLowerCase().includes("review")) {
+          typesSet.add("Review");
+          typesSet.add("AggregateRating");
+        } else if (name.toLowerCase().includes("local business") || name.toLowerCase().includes("localbusiness")) {
+          typesSet.add("LocalBusiness");
+        } else if (name.toLowerCase().includes("organization")) {
+          typesSet.add("Organization");
+        } else if (name.toLowerCase().includes("website")) {
+          typesSet.add("WebSite");
+        } else if (name.toLowerCase().includes("webpage")) {
+          typesSet.add("WebPage");
+        } else if (name.toLowerCase().includes("software")) {
+          typesSet.add("SoftwareApplication");
+        } else if (name.toLowerCase().includes("faq")) {
+          typesSet.add("FAQPage");
+        } else {
+          // Fallback to strip punctuation/spaces first word
+          const matched = name.match(/^[A-Za-z0-9]+/);
+          if (matched && matched[0]) {
+            typesSet.add(matched[0]);
+          }
+        }
+      });
+    }
+
+    // Add from additional recommended schema
+    if (result.additionalRecommendedSchema) {
+      result.additionalRecommendedSchema.forEach(rec => {
+        if (rec.type) {
+          typesSet.add(rec.type);
+        }
+      });
+    }
+
+    // Always have some default ones if none are detected (e.g. WebPage, WebSite)
+    if (typesSet.size === 0) {
+      typesSet.add("WebPage");
+      typesSet.add("WebSite");
+    }
+
+    return Array.from(typesSet);
+  }, [result]);
+
+  const activeSchemaType = selectedSchemaType || allSchemaTypes[0] || "Product";
+  const activeSchemaInfo = SCHEMA_DICTIONARY[activeSchemaType] || {
+    url: `https://schema.org/${activeSchemaType}`,
+    description: `A standard Schema.org entity representation for ${activeSchemaType}. This is an open vocabulary class supporting rich metadata properties.`,
+    category: "General" as const,
+    keyProperties: ["name", "url", "description", "image", "identifier"],
+    tips: "Ensure properties are correctly mapped in your JSON-LD using valid schemas definition and on-page parity."
+  };
+
+  const handleCopyReport = async () => {
+    const singleTask = {
+      templateName: templateName || "Standard Run",
+      url: url || "Manual Paste Snippet",
+      recommendedSchema: templateName || "WebPage",
+      result: result
+    };
+    const success = await copyTaskToClipboard(singleTask);
+    if (success) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
 
   const toggleSection = (name: string) => {
     setExpandedSections((prev) => ({
@@ -79,10 +277,27 @@ export default function Dashboard({ result }: DashboardProps) {
             <h4 className={`text-base font-bold tracking-tight ${bannerHeaderColor}`}>{bannerTitle}</h4>
             <p className="text-xs opacity-90 leading-relaxed font-sans font-medium">{bannerDesc}</p>
           </div>
-          <div className="md:ml-auto shrink-0 flex gap-2">
-            <span className="text-[10px] bg-white py-1.5 px-3 rounded-lg font-bold border border-current/10 uppercase tracking-widest text-navy shadow-sm">
+          <div className="md:ml-auto shrink-0 flex items-center gap-2">
+            <span className="text-[10px] bg-white py-1.5 px-5 h-9 flex items-center rounded-xl font-bold border border-current/10 uppercase tracking-widest text-navy shadow-sm">
               Detected: {result.detectedStructuredData?.length || 0} Types
             </span>
+            <Button
+              type="button"
+              onClick={handleCopyReport}
+              className={`${copied ? "bg-emerald-600 hover:bg-emerald-700" : "bg-navy hover:bg-navy/90"} text-white font-bold text-[10px] uppercase tracking-widest h-9 px-5 rounded-xl flex items-center gap-2 transition-all shadow-md shrink-0 cursor-pointer`}
+            >
+              {copied ? (
+                <>
+                  <Check className="w-3.5 h-3.5 whitespace-nowrap animate-bounce" />
+                  Copied Report!
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5 whitespace-nowrap" />
+                  Copy Report
+                </>
+              )}
+            </Button>
           </div>
         </div>
 
@@ -186,6 +401,126 @@ export default function Dashboard({ result }: DashboardProps) {
                 No detected structured data types on this execution snippet.
               </div>
             )}
+          </div>
+        </div>
+      </div>
+
+      {/* Schema.org Knowledge Base UI */}
+      <div className="bg-gradient-to-br from-[#F0EEE9] via-[#EAE6DF] to-[#F0EEE9] rounded-2xl border border-navy/10 p-6 md:p-8 shadow-xl space-y-6 relative overflow-hidden">
+        {/* Abstract background graphics for high-end look */}
+        <div className="absolute top-0 right-0 w-64 h-64 bg-radial-gradient from-[#C1D9F0]/20 to-transparent pointer-events-none rounded-full blur-3xl opacity-60" />
+        
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-navy/10 pb-5">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-navy">
+              <Library className="w-5 h-5 text-navy opacity-70 animate-pulse" />
+              <h3 className="font-heading font-bold text-lg uppercase tracking-wider">Entity &amp; Schema Knowledge Base</h3>
+            </div>
+            <p className="text-xs text-navy/70 leading-relaxed font-sans font-medium">
+              Grounded references from <strong>Schema.org</strong> core vocabularies and <strong>SchemaMantra</strong> guidelines matching your target page.
+            </p>
+          </div>
+          
+          <Badge className="bg-navy text-white text-[10px] uppercase font-bold tracking-widest px-4 py-1 rounded-full border-none self-start md:self-center shrink-0">
+            {allSchemaTypes.length} Active Entit{allSchemaTypes.length > 1 ? "ies" : "y"}
+          </Badge>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          {/* Left Column: Schema Type Selection Buttons */}
+          <div className="lg:col-span-4 flex flex-row lg:flex-col gap-2 overflow-x-auto lg:overflow-x-visible pb-2 lg:pb-0 scrollbar-none min-w-0 pr-1">
+            {allSchemaTypes.map((type) => {
+              const info = SCHEMA_DICTIONARY[type];
+              const isSelected = activeSchemaType === type;
+              return (
+                <button
+                  key={type}
+                  onClick={() => setSelectedSchemaType(type)}
+                  className={`text-left px-4 py-3 rounded-xl transition-all duration-300 font-sans text-xs font-bold uppercase tracking-wider shrink-0 lg:shrink flex items-center justify-between gap-3 border ${
+                    isSelected 
+                      ? "bg-navy text-white border-navy shadow-md shadow-navy/10" 
+                      : "bg-white text-navy/80 hover:bg-[#EAE6DF]/60 border-navy/10 hover:text-navy"
+                  }`}
+                >
+                  <span className="truncate">{type}</span>
+                  {info?.category ? (
+                    <Badge className={`text-[8px] uppercase px-1.5 py-0 rounded border-none tracking-normal font-sans font-semibold hidden md:inline-flex ${
+                      isSelected 
+                        ? "bg-[#C1D9F0]/20 text-[#C1D9F0]" 
+                        : "bg-navy/5 text-navy/70"
+                    }`}>
+                      {info.category}
+                    </Badge>
+                  ) : (
+                    <Badge className={`text-[8px] uppercase px-1.5 py-0 rounded border-none tracking-normal font-sans font-semibold hidden md:inline-flex ${
+                      isSelected ? "bg-[#C1D9F0]/20 text-[#C1D9F0]" : "bg-navy/5 text-navy/70"
+                    }`}>
+                      General
+                    </Badge>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Right Column: Detailed Card describing selected type */}
+          <div className="lg:col-span-8 bg-white p-6 md:p-8 rounded-2xl border border-navy/10 shadow-sm space-y-6">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-navy/10 pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="bg-navy/5 p-2 rounded-xl text-navy">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <h4 className="font-heading font-bold text-lg text-navy">{activeSchemaType} Schema</h4>
+              </div>
+              
+              <a
+                href={activeSchemaInfo.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs font-bold text-navy hover:text-navy/80 bg-[#C1D9F0]/20 hover:bg-[#C1D9F0]/30 border border-[#C1D9F0]/20 px-3.5 py-1.5 rounded-full flex items-center gap-1.5 transition-all"
+              >
+                <span>schema.org/{activeSchemaType}</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+
+            <div className="space-y-5 leading-normal">
+              {/* Description */}
+              <div className="space-y-1.5">
+                <span className="text-[10px] uppercase font-bold text-gray-400 tracking-widest font-sans">Semantic Definition</span>
+                <p className="text-sm text-navy/80 leading-relaxed font-sans font-medium">
+                  {activeSchemaInfo.description}
+                </p>
+              </div>
+
+              {/* Key Properties */}
+              <div className="space-y-2">
+                <span className="text-[10px] uppercase font-bold text-gray-400 tracking-widest font-sans">Core Validated Properties</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {activeSchemaInfo.keyProperties.map((prop) => (
+                    <span 
+                      key={prop} 
+                      className="bg-navy/5 border border-navy/5 text-navy/80 font-mono text-[10px] px-2.5 py-1 rounded-lg"
+                    >
+                      {prop}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Google Rich Snippet Tips */}
+              {activeSchemaInfo.tips && (
+                <div className="bg-[#FDE9AC]/10 border border-[#FDE9AC]/30 p-4 rounded-xl space-y-1">
+                  <span className="text-[10px] uppercase font-bold text-navy/60 tracking-widest font-sans flex items-center gap-1">
+                    <Zap className="w-3 h-3 text-navy opacity-70" />
+                    Rich Snippet Eligibility Tip
+                  </span>
+                  <p className="text-xs text-navy/80 leading-relaxed font-sans font-medium">
+                    {activeSchemaInfo.tips}
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -294,12 +629,14 @@ export default function Dashboard({ result }: DashboardProps) {
         </div>
         
         {result.verificationLog && (
-          <div className="bg-navy/5 border border-navy/10 p-4 rounded-xl">
+          <div className="bg-navy/5 border border-navy/10 p-5 rounded-xl space-y-2">
             <div className="flex items-center gap-2 mb-2">
               <CheckCircle2 className="w-3 h-3 text-navy opacity-50" />
               <span className="text-[10px] uppercase font-bold tracking-widest text-navy/60">Verification Layer (CoT/CoVe/CoD)</span>
             </div>
-            <p className="text-xs text-navy/80 italic leading-relaxed">{result.verificationLog}</p>
+            <div className="text-xs text-navy/80 leading-relaxed space-y-2 select-text prose prose-sm max-w-none">
+              <ReactMarkdown components={markdownComponents}>{result.verificationLog}</ReactMarkdown>
+            </div>
           </div>
         )}
       </div>
@@ -417,7 +754,7 @@ export default function Dashboard({ result }: DashboardProps) {
             Executive TLDR
           </h3>
           <div className="prose prose-sm max-w-none bg-white p-6 rounded-sm border border-gray-200 shadow-sm">
-            <ReactMarkdown>{result.executiveTldr}</ReactMarkdown>
+            <ReactMarkdown components={markdownComponents}>{result.executiveTldr}</ReactMarkdown>
           </div>
         </div>
         <div className="space-y-3">
@@ -426,7 +763,7 @@ export default function Dashboard({ result }: DashboardProps) {
             ELI5 Summary
           </h3>
           <div className="prose prose-sm max-w-none bg-white p-6 rounded-sm border border-gray-200 shadow-sm">
-            <ReactMarkdown>{result.eli5Summary}</ReactMarkdown>
+            <ReactMarkdown components={markdownComponents}>{result.eli5Summary}</ReactMarkdown>
           </div>
         </div>
       </div>
