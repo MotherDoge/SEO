@@ -1,14 +1,28 @@
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@700&family=Inter:wght@400;500;600&display=swap');
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/geist";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-    --font-heading: var(--font-sans);
-    --font-sans: 'Geist Variable', sans-serif;
+    /* Typography */
+    --font-heading: "Barlow Semi Condensed", sans-serif;
+    --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+    
+    /* Core Brand Colors */
+    --color-cloud-dancer: #F0EEE9;
+    --color-lemon-icing: #FDE9AC;
+    --color-raindrops: #E8D1DF;
+    --color-peach-dust: #EFD1C4;
+    --color-ice-melt: #C1D9F0;
+    
+    /* Extended Brand Colors */
+    --color-navy: #022386;
+    --color-orange: #FF8800;
+    --color-slate-text: #424242;
+
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -50,82 +64,40 @@
 }
 
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
+    --background: #F0EEE9; /* cloud-dancer */
+    --foreground: #424242; /* slate-text */
+    --card: #FFFFFF;
+    --card-foreground: #424242;
+    --popover: #FFFFFF;
+    --popover-foreground: #424242;
+    --primary: #022386; /* navy */
+    --primary-foreground: #FFFFFF;
+    --secondary: #EFD1C4; /* peach-dust */
+    --secondary-foreground: #022386; /* navy */
+    --muted: #E8D1DF; /* raindrops */
+    --muted-foreground: #424242; /* slate-text */
+    --accent: #C1D9F0; /* ice-melt */
+    --accent-foreground: #022386;
+    --destructive: #FF8800; /* orange */
+    --border: #0223861A; /* border-navy/10 directly */
+    --input: #0223861A;
+    --ring: #C1D9F0;
     --chart-1: oklch(0.87 0 0);
     --chart-2: oklch(0.556 0 0);
     --chart-3: oklch(0.439 0 0);
     --chart-4: oklch(0.371 0 0);
     --chart-5: oklch(0.269 0 0);
     --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
-}
-
-.dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
-    }
+  }
   body {
-    @apply bg-background text-foreground;
-    }
-  html {
-    @apply font-sans;
-    }
+    @apply font-sans text-slate-text bg-cloud-dancer;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-heading font-bold uppercase tracking-tight text-navy;
+  }
 }

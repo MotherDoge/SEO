@@ -254,14 +254,14 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="min-h-screen flex items-center justify-center bg-cloud-dancer bg-[radial-gradient(ellipse_at_top,_var(--color-ice-melt)_0%,_transparent_50%)]">
         <motion.div 
           animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
           transition={{ repeat: Infinity, duration: 2 }}
           className="flex flex-col items-center gap-4"
         >
-          <Sparkles className="w-12 h-12 text-primary" />
-          <p className="text-sm font-medium text-muted-foreground uppercase tracking-widest">Aura Orchestrating...</p>
+          <Sparkles className="w-12 h-12 text-navy" />
+          <p className="text-sm font-medium text-slate-text uppercase tracking-widest">Aura Orchestrating...</p>
         </motion.div>
       </div>
     );
@@ -269,15 +269,15 @@ export default function App() {
 
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background p-4">
-        <Card className="w-full max-w-md border-none shadow-2xl bg-card/50 backdrop-blur-xl">
+      <div className="min-h-screen flex items-center justify-center bg-cloud-dancer bg-[radial-gradient(ellipse_at_top,_var(--color-ice-melt)_0%,_transparent_50%)] p-4">
+        <Card className="w-full max-w-md border border-border shadow-2xl bg-white backdrop-blur-none">
           <CardHeader className="text-center space-y-4">
-            <div className="mx-auto w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center">
-              <Sparkles className="w-8 h-8 text-primary" />
+            <div className="mx-auto w-16 h-16 bg-ice-melt/30 rounded-2xl flex items-center justify-center">
+              <Sparkles className="w-8 h-8 text-navy" />
             </div>
             <div>
-              <CardTitle className="text-3xl font-bold tracking-tight">Aura Orchestrator</CardTitle>
-              <CardDescription className="text-base mt-2">
+              <CardTitle className="text-3xl font-bold tracking-tight text-navy">Aura Orchestrator</CardTitle>
+              <CardDescription className="text-base mt-2 text-slate-text">
                 Strategic content curation powered by intelligence.
               </CardDescription>
             </div>
@@ -285,7 +285,7 @@ export default function App() {
           <CardContent className="space-y-4">
             <Button 
               onClick={signInWithGoogle} 
-              className="w-full h-12 text-lg font-medium transition-all hover:scale-[1.02]"
+              className="w-full h-12 text-lg font-medium transition-all hover:scale-[1.02] bg-navy text-white hover:bg-navy/90"
             >
               Get Started with Google
             </Button>
@@ -299,9 +299,9 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground selection:bg-primary/20">
+    <div className="min-h-screen bg-cloud-dancer bg-[radial-gradient(ellipse_at_top,_var(--color-ice-melt)_0%,_transparent_50%)] text-slate-text selection:bg-ice-melt/40">
       {/* Header */}
-      <header className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-md">
+      <header className="sticky top-0 z-50 w-full border-b border-border bg-cloud-dancer/80 backdrop-blur-md">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Sparkles className="w-6 h-6 text-primary" />
@@ -344,7 +344,7 @@ export default function App() {
       <main className="container mx-auto px-4 py-8 max-w-7xl">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsContent value="create" className="mt-0">
-            <div className="max-w-2xl mx-auto">
+            <div className={`mx-auto transition-all duration-500 ${step === 4 ? "max-w-5xl" : "max-w-2xl"}`}>
               <StepIndicator currentStep={step} totalSteps={5} />
               
               <AnimatePresence mode="wait">
@@ -562,8 +562,8 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                      <Card className="md:col-span-2 overflow-hidden border-none shadow-lg bg-card/50 backdrop-blur-sm">
+                    <div className="space-y-8 flex flex-col">
+                      <Card className="overflow-hidden border border-border shadow-lg bg-white">
                         <CardHeader className="border-b bg-muted/30">
                           <div className="flex items-center justify-between">
                             <CardTitle className="text-lg flex items-center gap-2">
@@ -681,12 +681,6 @@ export default function App() {
                                           </Button>
                                         </li>
                                       ))}
-                                      {generatedStrategy.recommendations.multimedia?.map((item, i) => (
-                                        <li key={i} className="text-sm flex items-start gap-2 group/item text-muted-foreground/80">
-                                          <div className="w-1.5 h-1.5 rounded-full bg-primary/40 mt-1.5 shrink-0" />
-                                          <span className="flex-1">{item}</span>
-                                        </li>
-                                      ))}
                                     </ul>
                                   </div>
 
@@ -789,34 +783,36 @@ export default function App() {
                         </CardContent>
                       </Card>
 
-                      <div className="space-y-6">
-                        <Card className="border-none shadow-md overflow-hidden bg-card/50 backdrop-blur-sm">
+                      <div className="w-full">
+                        <Card className="border border-border shadow-md overflow-hidden bg-white">
                           <CardHeader className="pb-2">
                             <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">The Aura Logic</CardTitle>
                           </CardHeader>
-                          <CardContent className="p-6 space-y-6">
-                            <div className="space-y-2">
-                              <div className="flex items-center gap-2">
-                                <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-[10px] font-bold text-primary-foreground shadow-lg shadow-primary/20">WHY</div>
-                                <h4 className="font-bold text-base">Strategic Purpose</h4>
+                          <CardContent className="p-6">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                              <div className="space-y-3">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 rounded-full bg-navy flex items-center justify-center text-[11px] font-bold text-white shadow-lg shadow-navy/20">WHY</div>
+                                  <h4 className="font-bold text-lg text-navy">Strategic Purpose</h4>
+                                </div>
+                                <p className="text-slate-text leading-relaxed pl-13">{generatedStrategy.strategy.why}</p>
                               </div>
-                              <p className="text-muted-foreground pl-10 leading-relaxed">{generatedStrategy.strategy.why}</p>
-                            </div>
-                            
-                            <div className="space-y-2">
-                              <div className="flex items-center gap-2">
-                                <div className="w-8 h-8 rounded-full bg-primary/60 flex items-center justify-center text-[10px] font-bold text-primary-foreground">HOW</div>
-                                <h4 className="font-bold text-base text-primary/80">Appeal & Action</h4>
+                              
+                              <div className="space-y-3">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 rounded-full bg-navy/80 flex items-center justify-center text-[11px] font-bold text-white">HOW</div>
+                                  <h4 className="font-bold text-lg text-navy/80">Appeal & Action</h4>
+                                </div>
+                                <p className="text-slate-text leading-relaxed pl-13">{generatedStrategy.strategy.how}</p>
                               </div>
-                              <p className="text-muted-foreground pl-10 leading-relaxed">{generatedStrategy.strategy.how}</p>
-                            </div>
 
-                            <div className="space-y-2">
-                              <div className="flex items-center gap-2">
-                                <div className="w-8 h-8 rounded-full bg-primary/30 flex items-center justify-center text-[10px] font-bold text-primary-foreground">WHAT</div>
-                                <h4 className="font-bold text-base text-primary/60">Specific Narrative</h4>
+                              <div className="space-y-3">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 rounded-full bg-navy/60 flex items-center justify-center text-[11px] font-bold text-white">WHAT</div>
+                                  <h4 className="font-bold text-lg text-navy/60">Specific Narrative</h4>
+                                </div>
+                                <p className="text-slate-text leading-relaxed pl-13">{generatedStrategy.strategy.what}</p>
                               </div>
-                              <p className="text-muted-foreground pl-10 leading-relaxed">{generatedStrategy.strategy.what}</p>
                             </div>
                           </CardContent>
                         </Card>
@@ -856,7 +852,7 @@ export default function App() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                   >
-                    <Card className="h-full flex flex-col hover:shadow-lg transition-shadow border-none bg-card/50 backdrop-blur-sm group">
+                    <Card className="h-full flex flex-col hover:shadow-xl transition-shadow border border-border bg-white group hover:border-ice-melt/50">
                       <CardHeader className="pb-3">
                         <div className="flex justify-between items-start">
                           <Badge variant="outline" className="mb-2">{strategy.category}</Badge>
