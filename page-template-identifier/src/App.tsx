@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, ChangeEvent } from 'react';
+import { useState, useEffect, ChangeEvent } from 'react';
 import { GoogleGenAI, Type } from "@google/genai";
 import { motion, AnimatePresence } from "motion/react";
 import { 
@@ -19,7 +19,9 @@ import {
   Copy,
   Database,
   Upload,
-  Download
+  Download,
+  History,
+  X
 } from "lucide-react";
 
 // Initialize Gemini API
@@ -39,6 +41,11 @@ interface AnalysisResult {
   reasoning: string;
 }
 
+interface RunHistory {
+  date: string;
+  result: AnalysisResult;
+}
+
 export default function App() {
   const [urls, setUrls] = useState("");
   const [sitemapUrl, setSitemapUrl] = useState("");
@@ -46,7 +53,24 @@ export default function App() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [runHistory, setRunHistory] = useState<RunHistory[]>(() => {
+    const saved = localStorage.getItem('seoClarity_runHistory');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
+  });
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Save history to local storage
+  useEffect(() => {
+    localStorage.setItem('seoClarity_runHistory', JSON.stringify(runHistory));
+  }, [runHistory]);
 
   const addDiscoveryUrl = () => {
     if (!discoveryUrl.trim()) return;
@@ -297,6 +321,7 @@ Model Output:
 
       const data = JSON.parse(response.text);
       setResult(data);
+      setRunHistory(prev => [{ date: new Date().toISOString(), result: data }, ...prev]);
       
       if (isTruncated) {
         setError(`Note: Analyzed a representative sample of ${MAX_URLS_FOR_ANALYSIS} URLs out of ${allUrls.length.toLocaleString()} total to stay within processing limits.`);
@@ -361,108 +386,117 @@ Model Output:
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col font-sans">
       {/* Navigation */}
-      <nav className="h-16 bg-white border-bottom border-border flex items-center px-6 justify-between shrink-0 shadow-sm z-10">
+      <nav className="h-16 bg-white border-b border-navy/10 flex items-center px-6 justify-between shrink-0 shadow-sm z-10">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-accent rounded-lg flex items-center justify-center">
+          <div className="w-8 h-8 bg-navy rounded-lg flex items-center justify-center">
             <Database className="w-5 h-5 text-white" />
           </div>
-          <span className="font-bold text-xl text-accent tracking-tight">Schema Identifier</span>
+          <span className="font-bold text-xl text-navy tracking-tight uppercase font-heading">Page Template Identifier for Schema</span>
         </div>
         
-        {result && (
-          <div className="flex items-center gap-4">
-            <div className="bg-accent-light text-accent px-3 py-1.5 rounded-full text-sm font-semibold border border-accent/10">
-              analyzing: {result.domain_analyzed}
-            </div>
-            <div className="text-text-muted text-sm flex items-center gap-2">
-              Status: <span className="text-success font-bold flex items-center gap-1.5">
-                <div className="w-2 h-2 bg-success rounded-full" />
-                Complete
-              </span>
-            </div>
-          </div>
-        )}
+        <div className="flex items-center gap-4">
+          {result && (
+            <>
+              <div className="bg-ice-melt/20 text-navy px-3 py-1.5 rounded-full text-sm font-semibold border border-ice-melt/30">
+                analyzing: {result.domain_analyzed}
+              </div>
+              <div className="text-gray-400 text-sm flex items-center gap-2 font-sans font-bold uppercase tracking-widest text-[10px]">
+                Status: <span className="text-[#059669] font-bold flex items-center gap-1.5">
+                  <div className="w-2 h-2 bg-[#059669] rounded-full" />
+                  Complete
+                </span>
+              </div>
+            </>
+          )}
+          <button
+            onClick={() => setIsHistoryOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-navy/10 rounded-full text-sm font-semibold text-navy hover:bg-cloud-dancer transition-colors"
+          >
+            <History className="w-4 h-4" />
+            Runs history
+          </button>
+        </div>
       </nav>
 
       <div className="flex-grow grid grid-cols-[280px_1fr] overflow-hidden">
         {/* Sidebar */}
-        <aside className="bg-white border-r border-border p-6 overflow-y-auto">
-          <h3 className="text-sm font-bold text-text-main uppercase tracking-wider mb-6">Crawler Overview</h3>
+        <aside className="bg-white border-r border-navy/10 p-6 overflow-y-auto">
+          <h3 className="text-sm font-bold text-slate-text uppercase tracking-wider mb-6 font-heading">Crawler Overview</h3>
           
           <div className="space-y-4 mb-8">
             <div className="stat-card">
-              <p className="text-[10px] text-text-muted uppercase tracking-widest mb-1">Templates Discovered</p>
-              <p className="text-2xl font-bold">{result?.total_templates_discovered || 0}</p>
+              <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1 font-bold font-sans">Templates Discovered</p>
+              <p className="text-2xl font-bold font-heading">{result?.total_templates_discovered || 0}</p>
             </div>
             <div className="stat-card">
-              <p className="text-[10px] text-text-muted uppercase tracking-widest mb-1">URLs Analyzed</p>
-              <p className="text-2xl font-bold">{urls.split('\n').filter(l => l.trim()).length.toLocaleString()}</p>
+              <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1 font-bold font-sans">URLs Analyzed</p>
+              <p className="text-2xl font-bold font-heading">{urls.split('\n').filter(l => l.trim()).length.toLocaleString()}</p>
             </div>
           </div>
 
-          <div className="text-[11px] text-text-muted leading-relaxed bg-bg p-4 rounded-lg border border-border/50">
+          <div className="text-[11px] text-gray-400 leading-relaxed bg-cloud-dancer p-4 rounded-xl border border-navy/10 font-medium">
             Identification logic based on structural subdirectories and slug keyword frequency.
           </div>
 
           <div className="mt-8">
-            <h3 className="text-[10px] font-bold text-text-muted uppercase tracking-widest mb-4">Auto-Fetch Sitemap</h3>
+            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest bg-white mb-4">Auto-Fetch Sitemap</h3>
             <div className="flex flex-col gap-2 mb-6">
               <textarea
                 value={sitemapUrl}
                 onChange={(e) => setSitemapUrl(e.target.value)}
                 placeholder="Paste sitemap URLs (one per line)..."
-                className="w-full h-24 p-2 bg-bg rounded-lg border border-border focus:ring-2 focus:ring-accent/20 focus:border-accent outline-none transition-all text-[11px] resize-none"
+                className="w-full h-24 p-2 bg-cloud-dancer rounded-lg border border-navy/10 focus:ring-2 focus:ring-navy/20 focus:border-navy outline-none transition-all text-[11px] resize-none"
               />
               <button
                 onClick={fetchSitemap}
                 disabled={isFetching || !sitemapUrl.trim()}
-                className="w-full py-2 bg-white border border-border rounded-lg text-[10px] font-bold hover:bg-slate-50 transition-colors disabled:opacity-50"
+                className="w-full py-2 bg-white border border-navy/10 rounded-lg text-[10px] font-bold hover:bg-cloud-dancer transition-colors disabled:opacity-50 text-navy uppercase tracking-widest hover:text-navy/80"
               >
-                {isFetching ? <Loader2 className="w-3 h-3 animate-spin" /> : "Fetch All"}
+                {isFetching ? <Loader2 className="w-3 h-3 animate-spin mx-auto" /> : "Fetch All"}
               </button>
             </div>
 
-            <h3 className="text-[10px] font-bold text-text-muted uppercase tracking-widest mb-4">Manual Discovery</h3>
+            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">Manual Discovery</h3>
             <div className="flex flex-col gap-2 mb-6">
               <textarea
                 value={discoveryUrl}
                 onChange={(e) => setDiscoveryUrl(e.target.value)}
                 placeholder="Paste missing URLs (one per line)..."
-                className="w-full h-24 p-2 bg-bg rounded-lg border border-border focus:ring-2 focus:ring-accent/20 focus:border-accent outline-none transition-all text-[11px] resize-none"
+                className="w-full h-24 p-2 bg-cloud-dancer rounded-lg border border-navy/10 focus:ring-2 focus:ring-navy/20 focus:border-navy outline-none transition-all text-[11px] resize-none"
               />
               <button
                 onClick={addDiscoveryUrl}
                 disabled={!discoveryUrl.trim()}
-                className="w-full py-2 bg-white border border-border rounded-lg text-[10px] font-bold hover:bg-slate-50 transition-colors disabled:opacity-50"
+                className="w-full py-2 bg-white border border-navy/10 rounded-lg text-[10px] font-bold hover:bg-cloud-dancer transition-colors disabled:opacity-50 text-navy uppercase tracking-widest"
               >
                 Add to List
               </button>
             </div>
 
-            <h3 className="text-[10px] font-bold text-text-muted uppercase tracking-widest mb-4">GSC URL Upload</h3>
+            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">GSC URL Upload</h3>
             <div className="mb-6">
-              <label className="flex flex-col items-center justify-center w-full h-12 border-2 border-dashed border-border rounded-lg cursor-pointer bg-bg hover:bg-slate-50 transition-colors">
+              <label className="flex flex-col items-center justify-center w-full h-12 border-2 border-dashed border-navy/20 rounded-lg cursor-pointer bg-cloud-dancer hover:bg-cloud-dancer/80 transition-colors">
                 <div className="flex items-center gap-2">
-                  <Upload className="w-3 h-3 text-text-muted" />
-                  <span className="text-[10px] font-bold text-text-muted uppercase">Upload GSC CSV/TXT</span>
+                  <Upload className="w-3 h-3 text-gray-400" />
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Upload GSC CSV/TXT</span>
                 </div>
                 <input type="file" className="hidden" accept=".csv,.txt" onChange={handleGscUpload} />
               </label>
             </div>
 
-            <h3 className="text-[10px] font-bold text-text-muted uppercase tracking-widest mb-4">Unified URL List</h3>
+            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">Unified URL List</h3>
             <textarea
               value={urls}
               onChange={(e) => setUrls(e.target.value)}
               placeholder="Sitemap + Discovery URLs..."
-              className="w-full h-48 p-3 bg-bg rounded-lg border border-border focus:ring-2 focus:ring-accent/20 focus:border-accent outline-none transition-all font-mono text-[11px] resize-none"
+              className="w-full h-48 p-3 bg-cloud-dancer rounded-lg border border-navy/10 focus:ring-2 focus:ring-navy/20 focus:border-navy outline-none transition-all font-mono text-[11px] resize-none"
             />
             <button
               onClick={analyzeSitemap}
               disabled={isAnalyzing || !urls.trim()}
-              className="w-full mt-4 py-3 bg-accent hover:bg-accent/90 disabled:bg-slate-100 disabled:text-slate-400 text-white font-bold text-sm rounded-lg transition-all flex items-center justify-center gap-2 shadow-sm"
+              className="w-full mt-4 py-3 bg-navy hover:bg-navy/90 disabled:bg-cloud-dancer disabled:text-gray-400 text-white font-bold text-sm rounded-lg transition-all flex items-center justify-center gap-2 shadow-sm"
             >
               {isAnalyzing ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -475,7 +509,7 @@ Model Output:
         </aside>
 
         {/* Main Content */}
-        <main className="p-8 overflow-y-auto bg-bg">
+        <main className="p-8 overflow-y-auto bg-cloud-dancer">
           <AnimatePresence mode="wait">
             {!result && !isAnalyzing && (
               <motion.div 
@@ -484,11 +518,11 @@ Model Output:
                 animate={{ opacity: 1 }}
                 className="h-full flex flex-col items-center justify-center text-center"
               >
-                <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-sm border border-border mb-4">
-                  <Layout className="w-8 h-8 text-slate-300" />
+                <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-sm border border-navy/10 mb-4">
+                  <Layout className="w-8 h-8 text-gray-300" />
                 </div>
-                <h3 className="text-xl font-bold text-text-main mb-2">Ready for Analysis</h3>
-                <p className="text-text-muted max-w-sm">Paste your sitemap URLs in the sidebar and click "Run Analysis" to begin clustering.</p>
+                <h3 className="text-xl font-bold font-heading text-slate-text mb-2">Ready for Analysis</h3>
+                <p className="text-gray-500 max-w-sm">Paste your sitemap URLs in the sidebar and click "Run Analysis" to begin clustering.</p>
               </motion.div>
             )}
 
@@ -500,11 +534,11 @@ Model Output:
                 className="h-full flex flex-col items-center justify-center text-center"
               >
                 <div className="relative mb-6">
-                  <div className="w-16 h-16 border-4 border-accent/10 border-t-accent rounded-full animate-spin" />
-                  <Database className="w-6 h-6 text-accent absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+                  <div className="w-16 h-16 border-4 border-navy/10 border-t-navy rounded-full animate-spin" />
+                  <Database className="w-6 h-6 text-navy absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
                 </div>
-                <h3 className="text-xl font-bold text-text-main mb-2">Mapping Domain Templates</h3>
-                <p className="text-text-muted animate-pulse">Analyzing URL patterns and page intent...</p>
+                <h3 className="text-xl font-bold font-heading text-slate-text mb-2">Mapping Domain Templates</h3>
+                <p className="text-gray-500 animate-pulse">Analyzing URL patterns and page intent...</p>
               </motion.div>
             )}
 
@@ -513,55 +547,55 @@ Model Output:
                 key="results"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="space-y-6"
+                className="space-y-6 max-w-5xl mx-auto"
               >
-                <div className="flex items-center justify-between bg-amber-50 border border-amber-100 p-4 rounded-xl">
+                <div className="flex items-center justify-between bg-lemon-icing/10 border border-lemon-icing/30 p-4 rounded-xl">
                   <div className="flex items-center gap-3">
-                    <div className="p-2 bg-amber-100 rounded-lg">
-                      <AlertCircle className="w-4 h-4 text-amber-600" />
+                    <div className="p-2 bg-lemon-icing/20 rounded-lg">
+                      <AlertCircle className="w-5 h-5 text-[#FF8800]" />
                     </div>
                     <div>
-                      <p className="text-xs font-bold text-amber-900">Sitemap Completeness Check</p>
-                      <p className="text-[11px] text-amber-700">Sitemaps often miss deep pages. Use "Manual Discovery" to add URLs you've found while browsing or upload a .csv file from your Google Search Console export.</p>
+                      <p className="text-xs font-bold text-slate-text uppercase tracking-widest mb-0.5">Sitemap Completeness Check</p>
+                      <p className="text-[11px] text-gray-500 font-medium">Sitemaps often miss deep pages. Use "Manual Discovery" to add URLs you've found while browsing or upload a .csv file from your Google Search Console export.</p>
                     </div>
                   </div>
                 </div>
 
-                <div className="flex items-end justify-between">
-                  <h2 className="text-lg font-bold text-text-main">Detected Page Templates</h2>
-                  <span className="text-[11px] text-text-muted">Last updated: {new Date().toLocaleDateString()}</span>
+                <div className="flex items-end justify-between mt-8">
+                  <h2 className="text-2xl font-bold font-heading text-slate-text">Detected Page Templates</h2>
+                  <span className="text-[11px] text-gray-400 uppercase tracking-widest font-bold">Last updated: {new Date().toLocaleTimeString()}</span>
                 </div>
 
-                <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden">
+                <div className="bg-white p-6 md:p-8 rounded-2xl border border-navy/10 shadow-sm overflow-hidden">
                   <table className="w-full text-left border-collapse">
                     <thead>
-                      <tr className="bg-slate-50 border-b border-border">
-                        <th className="px-6 py-3 text-[10px] font-bold text-text-muted uppercase tracking-widest w-[35%]">Template & Pattern</th>
-                        <th className="px-6 py-3 text-[10px] font-bold text-text-muted uppercase tracking-widest w-[25%]">Recommended Schema</th>
-                        <th className="px-6 py-3 text-[10px] font-bold text-text-muted uppercase tracking-widest w-[40%]">Sample URLs</th>
+                      <tr className="border-b border-navy/10">
+                        <th className="px-2 py-3 text-[10px] font-bold text-gray-400 uppercase tracking-widest w-[35%]">Template & Pattern</th>
+                        <th className="px-2 py-3 text-[10px] font-bold text-gray-400 uppercase tracking-widest w-[25%]">Recommended Schema</th>
+                        <th className="px-2 py-3 text-[10px] font-bold text-gray-400 uppercase tracking-widest w-[40%]">Sample URLs</th>
                       </tr>
                     </thead>
                     <tbody>
                       {result.templates.map((template, idx) => (
-                        <tr key={idx} className="border-b border-border last:border-0 hover:bg-slate-50/50 transition-colors">
-                          <td className="px-6 py-4">
-                            <span className="block font-bold text-text-main mb-1.5">{template.template_name}</span>
+                        <tr key={idx} className="border-b border-navy/10 last:border-0 hover:bg-cloud-dancer/30 transition-colors">
+                          <td className="px-2 py-4">
+                            <span className="block font-bold font-heading text-slate-text mb-1.5 text-base">{template.template_name}</span>
                             <span className="url-pattern">{template.url_pattern}</span>
                           </td>
-                          <td className="px-6 py-4">
+                          <td className="px-2 py-4">
                             <span className="schema-tag">@{template.recommended_primary_schema}</span>
                           </td>
-                          <td className="px-6 py-4">
+                          <td className="px-2 py-4">
                             <ul className="space-y-1.5">
                               {template.sample_urls.map((url, uIdx) => (
                                 <li key={uIdx} className="flex items-center gap-2 group/url">
-                                  <div className="w-1 h-1 bg-border rounded-full shrink-0" />
-                                  <span className="text-[11px] text-text-muted font-mono truncate max-w-[300px]">{url}</span>
+                                  <div className="w-1 h-1 bg-gray-300 rounded-full shrink-0" />
+                                  <span className="text-[11px] text-gray-500 font-mono truncate max-w-[280px]">{url}</span>
                                   <a 
                                     href={url} 
                                     target="_blank" 
                                     rel="noopener noreferrer"
-                                    className="opacity-0 group-hover/url:opacity-100 transition-opacity text-accent"
+                                    className="opacity-0 group-hover/url:opacity-100 transition-opacity text-navy shrink-0"
                                   >
                                     <ExternalLink className="w-3 h-3" />
                                   </a>
@@ -576,32 +610,39 @@ Model Output:
                 </div>
 
                 {/* CoT Reasoning Box */}
-                <div className="bg-white border border-border rounded-xl p-6 shadow-sm">
+                <div className="bg-white p-6 md:p-8 rounded-2xl border border-navy/10 shadow-sm mt-6">
                   <div className="flex items-center gap-2 mb-4">
-                    <div className="p-1.5 bg-accent-light rounded-md">
-                      <Code className="w-4 h-4 text-accent" />
+                    <div className="p-1.5 bg-raindrops/30 rounded-md">
+                      <Code className="w-4 h-4 text-navy" />
                     </div>
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-text-main">CoT Reasoning</h3>
+                    <h3 className="text-sm font-bold uppercase tracking-widest text-[#FF8800]">AI Extraction Logic (Why)</h3>
                   </div>
-                  <p className="text-sm text-text-muted leading-relaxed">
+                  <p className="text-sm text-slate-text leading-relaxed font-medium">
                     {result.reasoning}
                   </p>
+                  
+                  <div className="mt-6 p-4 bg-cloud-dancer/50 rounded-xl border border-navy/5">
+                    <h4 className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">ELI5 Summary</h4>
+                    <p className="text-xs text-slate-text/80 font-medium italic">
+                      "I grouped the URLs by matching patterns in their web addresses (How) to ensure we map each unique structure to the appropriate Schema type without missing anything (What)."
+                    </p>
+                  </div>
                 </div>
 
                 <div className="flex justify-end gap-3 pt-4">
                   <button 
                     onClick={downloadJson}
-                    className="px-4 py-2 bg-white border border-border rounded-lg text-sm font-semibold hover:bg-slate-50 transition-colors flex items-center gap-2"
+                    className="px-4 py-2 bg-cloud-dancer border border-navy/10 rounded-lg text-xs font-bold text-slate-text uppercase tracking-widest hover:bg-gray-200 transition-colors flex items-center gap-2"
                   >
-                    <Copy className="w-4 h-4" />
+                    <Copy className="w-3 h-3" />
                     Download JSON
                   </button>
                   <button 
                     onClick={downloadCsv}
-                    className="px-4 py-2 bg-accent text-white rounded-lg text-sm font-bold hover:bg-accent/90 transition-colors flex items-center gap-2 shadow-sm"
+                    className="px-4 py-2 bg-peach-dust text-slate-text rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-[#C1D9F0]/80 transition-colors flex items-center gap-2 shadow-sm"
                   >
-                    <Download className="w-4 h-4" />
-                    Export to Schema Architect (.CSV)
+                    <Download className="w-3 h-3" />
+                    Export to Schema Architect
                   </button>
                 </div>
               </motion.div>
@@ -612,14 +653,99 @@ Model Output:
             <motion.div 
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mt-6 p-4 bg-red-50 border border-red-100 rounded-xl flex items-start gap-3 text-red-700"
+              className="mt-6 p-4 bg-lemon-icing/10 border border-lemon-icing/30 rounded-xl flex items-start gap-3 text-slate-text shadow-sm"
             >
-              <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
-              <p className="text-sm font-medium">{error}</p>
+              <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-[#FF8800]" />
+              <p className="text-sm font-bold">{error}</p>
             </motion.div>
           )}
         </main>
       </div>
+
+      {/* Runs History Sidebar Overlay */}
+      <AnimatePresence>
+        {isHistoryOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsHistoryOpen(false)}
+              className="fixed inset-0 bg-navy/20 backdrop-blur-sm z-40 transition-opacity"
+            />
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="fixed top-0 right-0 bottom-0 w-full max-w-md bg-cloud-dancer border-l border-navy/10 shadow-2xl z-50 flex flex-col"
+            >
+              <div className="flex items-center justify-between p-6 border-b border-navy/10 bg-white">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-ice-melt/20 rounded-lg">
+                    <History className="w-5 h-5 text-navy" />
+                  </div>
+                  <h2 className="text-xl font-bold font-heading text-navy uppercase tracking-tight">Run History</h2>
+                </div>
+                <button
+                  onClick={() => setIsHistoryOpen(false)}
+                  className="p-2 text-gray-400 hover:text-navy hover:bg-cloud-dancer rounded-full transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                {runHistory.length === 0 ? (
+                  <div className="text-center py-12">
+                    <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-sm border border-navy/10 mx-auto mb-4">
+                      <History className="w-8 h-8 text-gray-300" />
+                    </div>
+                    <p className="text-sm font-bold text-gray-400 uppercase tracking-widest">No previous runs yet</p>
+                  </div>
+                ) : (
+                  runHistory.map((run, hIdx) => (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: hIdx * 0.05 }}
+                      key={hIdx}
+                      className="bg-white p-5 rounded-2xl border border-navy/10 shadow-sm hover:shadow-md transition-all group"
+                    >
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                            {new Date(run.date).toLocaleString(undefined, { 
+                              dateStyle: 'medium', 
+                              timeStyle: 'short' 
+                            })}
+                          </span>
+                          <p className="font-heading font-bold text-lg text-slate-text mt-1">{run.result.domain_analyzed || "Unknown Domain"}</p>
+                        </div>
+                        <div className="px-2.5 py-1 bg-ice-melt/20 rounded-md text-[10px] font-bold text-navy uppercase tracking-widest text-center min-w-[3rem]">
+                          {run.result.total_templates_discovered} <br /> Temp.
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-gray-500 font-medium mb-4 line-clamp-2">
+                        {run.result.templates.map(t => t.template_name).join(", ")}
+                      </p>
+                      <button 
+                        onClick={() => {
+                          setResult(run.result);
+                          setIsHistoryOpen(false);
+                        }}
+                        className="w-full py-2 bg-cloud-dancer border border-navy/10 rounded-lg text-[10px] font-bold text-navy uppercase tracking-widest hover:bg-ice-melt/30 transition-colors group-hover:border-navy/30"
+                      >
+                        Restore This Analysis
+                      </button>
+                    </motion.div>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

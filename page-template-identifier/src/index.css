@@ -1,41 +1,45 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@700&family=Inter:wght@400;500;600&display=swap');
 @import "tailwindcss";
 
 @theme {
+  /* Typography Configuration */
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: "Barlow Semi Condensed", sans-serif;
   --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
 
-  --color-bg: #F8F9FB;
-  --color-sidebar: #FFFFFF;
-  --color-border: #E2E8F0;
-  --color-text-main: #1E293B;
-  --color-text-muted: #64748B;
-  --color-accent: #2563EB;
-  --color-accent-light: #EFF6FF;
-  --color-schema-bg: #F1F5F9;
-  --color-success: #059669;
+  /* Core Brand Colors */
+  --color-cloud-dancer: #F0EEE9;
+  --color-lemon-icing: #FDE9AC;
+  --color-raindrops: #E8D1DF;
+  --color-peach-dust: #EFD1C4;
+  --color-ice-melt: #C1D9F0;
+  
+  /* Additional Structural Colors */
+  --color-navy: #022386;
+  --color-orange: #FF8800;
+  --color-slate-text: #424242;
 }
 
 @layer base {
   body {
-    @apply bg-bg text-text-main font-sans antialiased;
+    @apply font-sans text-slate-text bg-cloud-dancer antialiased;
   }
   
   h1, h2, h3, h4, h5, h6 {
-    @apply font-sans font-bold text-text-main;
+    @apply font-heading font-bold uppercase tracking-tight;
   }
 }
 
 @layer components {
   .stat-card {
-    @apply p-4 border border-border rounded-lg bg-white shadow-sm transition-all hover:shadow-md;
+    @apply bg-white p-4 border border-navy/10 rounded-xl shadow-sm transition-all hover:shadow-md;
   }
   
   .schema-tag {
-    @apply inline-flex items-center bg-schema-bg px-2.5 py-1 rounded-md text-[13px] font-medium text-text-main;
+    @apply inline-flex items-center bg-raindrops/30 px-2.5 py-1 rounded-md text-[13px] font-bold text-navy;
   }
   
   .url-pattern {
-    @apply font-mono text-[12px] text-accent bg-accent-light px-1.5 py-0.5 rounded border border-accent/10;
+    @apply font-mono text-[12px] text-navy bg-ice-melt/20 px-1.5 py-0.5 rounded border border-ice-melt/30;
   }
 }
