@@ -43,33 +43,34 @@
 2. **Install dependencies:**
 
    npm install
-# or
-bun install
+   # or
+   bun install
 
 3. **Configure Environment Variables:**
    
 Create a .env.local file in the root directory and add your Gemini API key:
 
-GEMINI_API_KEY=your_actual_api_key_here
+   GEMINI_API_KEY=your_actual_api_key_here
 
 4. **Start the development server:**
 
    npm run dev
-# or
-bun dev
+   # or
+   bun dev
 
 Open http://localhost:5173 (or the URL displayed in your terminal) to view the application.
 
-----
+---
 
 **Available Scripts**
-npm run dev — Starts the local Vite development server.
 
-npm run build — Compiles TypeScript and builds the production bundle.
+   npm run dev — Starts the local Vite development server.
 
-npm run preview — Locally previews the production build.
+   npm run build — Compiles TypeScript and builds the production bundle.
 
-npm run lint — Runs ESLint to check code quality.
+   npm run preview — Locally previews the production build.
+
+   npm run lint — Runs ESLint to check code quality.
 
 ---
 
