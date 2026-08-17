@@ -110,6 +110,13 @@ const SCHEMA_DICTIONARY: Record<string, {
     keyProperties: ["name", "operatingSystem", "applicationCategory", "downloadUrl", "offers"],
     tips: "Always include 'operatingSystem' (e.g., 'iOS, Android') and populate 'downloadUrl' with play/app store links when applicable."
   },
+  WebApplication: {
+    url: "https://schema.org/WebApplication",
+    description: "An interactive web application tool or software widget, such as an online calculator, estimator, or interactive rate converter.",
+    category: "Creative & Social",
+    keyProperties: ["name", "browserRequirements", "applicationCategory", "operatingSystem", "offers"],
+    tips: "Set 'applicationCategory' to 'BusinessApplication', 'FinanceApplication', or 'UtilityApplication'. Ensure on-page tool features match schema attributes."
+  },
   FAQPage: {
     url: "https://schema.org/FAQPage",
     description: "A web page presenting one or more Frequently Asked Questions (FAQs) mapped to structured answer blocks.",
@@ -162,14 +169,15 @@ export default function Dashboard({ result, url, templateName }: DashboardProps)
           typesSet.add("AggregateRating");
         } else if (name.toLowerCase().includes("local business") || name.toLowerCase().includes("localbusiness")) {
           typesSet.add("LocalBusiness");
-        } else if (name.toLowerCase().includes("organization")) {
+        } else if (name.toLowerCase().includes("organization") || name.toLowerCase().includes("provider")) {
           typesSet.add("Organization");
         } else if (name.toLowerCase().includes("website")) {
           typesSet.add("WebSite");
         } else if (name.toLowerCase().includes("webpage")) {
           typesSet.add("WebPage");
-        } else if (name.toLowerCase().includes("software")) {
+        } else if (name.toLowerCase().includes("software") || name.toLowerCase().includes("calc") || name.toLowerCase().includes("tool") || name.toLowerCase().includes("app")) {
           typesSet.add("SoftwareApplication");
+          typesSet.add("WebApplication");
         } else if (name.toLowerCase().includes("faq")) {
           typesSet.add("FAQPage");
         } else {
@@ -357,11 +365,11 @@ export default function Dashboard({ result, url, templateName }: DashboardProps)
                                 {item.itemName || "Unnamed item"}
                               </span>
                               <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider font-sans">
-                                {item.errors.length === 0 && item.warnings.length === 0 ? "Valid" : "Pending Action"}
+                                {(!item.errors || item.errors.length === 0) && (!item.warnings || item.warnings.length === 0) ? "Valid" : "Pending Action"}
                               </span>
                             </div>
 
-                            {item.errors.length > 0 && (
+                            {item.errors?.length > 0 && (
                               <div className="space-y-1.5 pt-1">
                                 {item.errors.map((err, eIdx) => (
                                   <div key={eIdx} className="text-xs text-red-800 bg-red-50/40 px-3 py-2 rounded-lg border border-red-100/50 flex items-start gap-2">
@@ -372,7 +380,7 @@ export default function Dashboard({ result, url, templateName }: DashboardProps)
                               </div>
                             )}
 
-                            {item.warnings.length > 0 && (
+                            {item.warnings?.length > 0 && (
                               <div className="space-y-1.5 pt-1">
                                 {item.warnings.map((warn, wIdx) => (
                                   <div key={wIdx} className="text-xs text-amber-800 bg-amber-50/40 px-3 py-2 rounded-lg border border-amber-100/50 flex items-start gap-2">
@@ -383,7 +391,7 @@ export default function Dashboard({ result, url, templateName }: DashboardProps)
                               </div>
                             )}
 
-                            {item.errors.length === 0 && item.warnings.length === 0 && (
+                            {(!item.errors || item.errors.length === 0) && (!item.warnings || item.warnings.length === 0) && (
                               <div className="text-xs text-emerald-800 bg-emerald-50/20 px-3 py-2 rounded-lg border border-emerald-100/30 flex items-center gap-2">
                                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                                 <span>Item fully conforming to specifications. Eligible for rich result appearance.</span>
@@ -635,7 +643,7 @@ export default function Dashboard({ result, url, templateName }: DashboardProps)
               <span className="text-[10px] uppercase font-bold tracking-widest text-navy/60">Verification Layer (CoT/CoVe/CoD)</span>
             </div>
             <div className="text-xs text-navy/80 leading-relaxed space-y-2 select-text prose prose-sm max-w-none">
-              <ReactMarkdown components={markdownComponents}>{result.verificationLog}</ReactMarkdown>
+              <ReactMarkdown components={markdownComponents}>{result.verificationLog || ""}</ReactMarkdown>
             </div>
           </div>
         )}
@@ -650,7 +658,7 @@ export default function Dashboard({ result, url, templateName }: DashboardProps)
         </div>
         
         <div className="grid grid-cols-1 gap-6">
-          {result.auditCards.map((card, idx) => (
+          {result.auditCards?.map((card, idx) => (
             <div 
               key={idx} 
               className={`p-8 rounded-2xl border flex flex-col md:flex-row gap-6 transition-all hover:shadow-lg ${
@@ -709,7 +717,7 @@ export default function Dashboard({ result, url, templateName }: DashboardProps)
       </div>
 
       {/* Additional Recommendations */}
-      {result.additionalRecommendedSchema.length > 0 && (
+      {result.additionalRecommendedSchema?.length > 0 && (
         <div className="space-y-8">
           <div className="flex items-center gap-3">
             <div className="h-px flex-1 bg-gray-200" />
@@ -754,7 +762,7 @@ export default function Dashboard({ result, url, templateName }: DashboardProps)
             Executive TLDR
           </h3>
           <div className="prose prose-sm max-w-none bg-white p-6 rounded-sm border border-gray-200 shadow-sm">
-            <ReactMarkdown components={markdownComponents}>{result.executiveTldr}</ReactMarkdown>
+            <ReactMarkdown components={markdownComponents}>{result.executiveTldr || ""}</ReactMarkdown>
           </div>
         </div>
         <div className="space-y-3">
@@ -763,7 +771,7 @@ export default function Dashboard({ result, url, templateName }: DashboardProps)
             ELI5 Summary
           </h3>
           <div className="prose prose-sm max-w-none bg-white p-6 rounded-sm border border-gray-200 shadow-sm">
-            <ReactMarkdown components={markdownComponents}>{result.eli5Summary}</ReactMarkdown>
+            <ReactMarkdown components={markdownComponents}>{result.eli5Summary || ""}</ReactMarkdown>
           </div>
         </div>
       </div>
