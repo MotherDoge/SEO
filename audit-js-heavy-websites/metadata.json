@@ -1,0 +1,6 @@
+{
+  "name": "AUDIT JS Heavy Websites",
+  "description": "Analyze and audit the differences between JavaScript-rendered and non-JavaScript HTML for SEO and accessibility insights.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
