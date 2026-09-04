@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { AuditResult } from "@/src/services/gemini";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -21,10 +21,13 @@ import {
   BookOpen,
   ExternalLink,
   Library,
-  FileText
+  FileText,
+  Code
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { copyTaskToClipboard } from "../utils/reportGenerator";
+import TableOfContents from "./TableOfContents";
+import SchemaEditor from "./SchemaEditor";
 
 const SCHEMA_DICTIONARY: Record<string, {
   url: string;
@@ -147,6 +150,58 @@ export default function Dashboard({ result, url, templateName }: DashboardProps)
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const [copied, setCopied] = useState(false);
   const [selectedSchemaType, setSelectedSchemaType] = useState<string | null>(null);
+  const [activeSection, setActiveSection] = useState<string>("section-detected-data");
+
+  const scrollToSection = (id: string) => {
+    const el = document.getElementById(id);
+    if (el) {
+      const yOffset = -90;
+      const y = el.getBoundingClientRect().top + window.pageYOffset + yOffset;
+      window.scrollTo({ top: y, behavior: "smooth" });
+      if (id.startsWith("sub-")) {
+        setActiveSection("section-audit-findings");
+      } else {
+        setActiveSection(id);
+      }
+    }
+  };
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const sectionIds = [
+        "section-detected-data",
+        "section-knowledge-base",
+        "section-audit-findings",
+        "sub-metrics",
+        "sub-verification",
+        "sub-audit-cards",
+        "section-strategic-recommendations",
+        "section-master-build",
+        "section-search-console",
+        "section-executive-summary"
+      ];
+
+      const scrollPosition = window.scrollY + 180;
+
+      for (let i = sectionIds.length - 1; i >= 0; i--) {
+        const el = document.getElementById(sectionIds[i]);
+        if (el) {
+          const top = el.offsetTop;
+          if (scrollPosition >= top) {
+            if (sectionIds[i].startsWith("sub-")) {
+              setActiveSection("section-audit-findings");
+            } else {
+              setActiveSection(sectionIds[i]);
+            }
+            return;
+          }
+        }
+      }
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   // Extract all unique schema types referenced in detected data and recommendations
   const allSchemaTypes = useMemo(() => {
@@ -263,21 +318,102 @@ export default function Dashboard({ result, url, templateName }: DashboardProps)
   }
 
   const totalDetectedItems = result.detectedStructuredData?.reduce((acc, curr) => acc + (curr.itemCount || 0), 0) || 0;
+  const overallStatus: "eligible" | "warnings" | "invalid" = hasErrors ? "invalid" : hasWarnings ? "warnings" : "eligible";
+
+  const tocMetrics = {
+    totalDetected: totalDetectedItems,
+    schemaTypesCount: allSchemaTypes.length,
+    healthScore: result.healthScore,
+    errorCount: result.errorCount,
+    oppCount: result.opportunityCount,
+    recommendationsCount: result.additionalRecommendedSchema?.length || 0,
+    hasGsc: Boolean(result.gscAnalysis && result.gscAnalysis.length > 0),
+    gscCount: result.gscAnalysis?.length || 0,
+    status: overallStatus
+  };
 
   return (
-    <div className="p-8 max-w-6xl mx-auto space-y-10 animate-in fade-in zoom-in-95 duration-500">
-      {/* Google Rich Results Test Emulator Header */}
-      <div className="space-y-6">
-        <div className="flex items-center gap-3">
-          <div className="h-px flex-1 bg-gray-200" />
-          <div className="text-center flex flex-col items-center">
-            <h3 className="text-xs font-bold uppercase tracking-[0.3em] text-gray-400">Schema Rich Results Engine</h3>
-            <p className="text-xs text-navy font-bold uppercase mt-1.5 tracking-wider bg-ice-melt/20 px-3 py-1 rounded-full border border-ice-melt/10">
-              {totalDetectedItems} Item{totalDetectedItems !== 1 ? "s" : ""} Detected
-            </p>
-          </div>
-          <div className="h-px flex-1 bg-gray-200" />
-        </div>
+    <div className="w-full max-w-7xl mx-auto space-y-8 animate-in fade-in zoom-in-95 duration-500">
+      {/* Mobile / Tablet Horizontal Sticky Quick-Jump Navigation Bar */}
+      <div className="lg:hidden sticky top-2 z-30 bg-white/95 backdrop-blur-md p-2 rounded-xl border border-navy/10 shadow-md flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+        <button
+          onClick={() => scrollToSection("section-detected-data")}
+          className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors cursor-pointer ${
+            activeSection === "section-detected-data" ? "bg-navy text-white shadow-sm" : "bg-gray-100 text-navy hover:bg-gray-200"
+          }`}
+        >
+          Detected Data ({totalDetectedItems})
+        </button>
+        <button
+          onClick={() => scrollToSection("section-knowledge-base")}
+          className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors cursor-pointer ${
+            activeSection === "section-knowledge-base" ? "bg-navy text-white shadow-sm" : "bg-gray-100 text-navy hover:bg-gray-200"
+          }`}
+        >
+          Knowledge Base ({allSchemaTypes.length})
+        </button>
+        <button
+          onClick={() => scrollToSection("section-audit-findings")}
+          className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors cursor-pointer ${
+            activeSection === "section-audit-findings" ? "bg-navy text-white shadow-sm" : "bg-gray-100 text-navy hover:bg-gray-200"
+          }`}
+        >
+          Audit Findings ({result.healthScore}%)
+        </button>
+        {result.additionalRecommendedSchema?.length > 0 && (
+          <button
+            onClick={() => scrollToSection("section-strategic-recommendations")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors cursor-pointer ${
+              activeSection === "section-strategic-recommendations" ? "bg-navy text-white shadow-sm" : "bg-gray-100 text-navy hover:bg-gray-200"
+            }`}
+          >
+            Recommendations ({result.additionalRecommendedSchema.length})
+          </button>
+        )}
+        <button
+          onClick={() => scrollToSection("section-master-build")}
+          className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors cursor-pointer ${
+            activeSection === "section-master-build" ? "bg-navy text-white shadow-sm" : "bg-gray-100 text-navy hover:bg-gray-200"
+          }`}
+        >
+          Master Build
+        </button>
+        {result.gscAnalysis && result.gscAnalysis.length > 0 && (
+          <button
+            onClick={() => scrollToSection("section-search-console")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors cursor-pointer ${
+              activeSection === "section-search-console" ? "bg-navy text-white shadow-sm" : "bg-gray-100 text-navy hover:bg-gray-200"
+            }`}
+          >
+            Search Console ({result.gscAnalysis.length})
+          </button>
+        )}
+        <button
+          onClick={() => scrollToSection("section-executive-summary")}
+          className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors cursor-pointer ${
+            activeSection === "section-executive-summary" ? "bg-navy text-white shadow-sm" : "bg-gray-100 text-navy hover:bg-gray-200"
+          }`}
+        >
+          Summary
+        </button>
+      </div>
+
+      {/* Main Grid: Left Content Column + Right Sticky Table of Contents */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start relative">
+        {/* Left Column: Interactive Audit Sections */}
+        <div className="lg:col-span-8 xl:col-span-9 space-y-12 min-w-0">
+          {/* Section 1: Detected Structured Data */}
+          <section id="section-detected-data" className="scroll-mt-24 space-y-6">
+            <div className="flex items-center gap-3">
+              <div className="h-px flex-1 bg-gray-200" />
+              <div className="text-center flex flex-col items-center">
+                <h3 className="text-xs font-bold uppercase tracking-[0.3em] text-gray-400">Schema Rich Results Engine</h3>
+                <p className="text-xs text-navy font-bold uppercase mt-1.5 tracking-wider bg-ice-melt/20 px-3 py-1 rounded-full border border-ice-melt/10">
+                  {totalDetectedItems} Item{totalDetectedItems !== 1 ? "s" : ""} Detected
+                </p>
+              </div>
+              <div className="h-px flex-1 bg-gray-200" />
+            </div>
 
         <div className={`p-6 rounded-2xl border ${bannerBg} flex flex-col md:flex-row gap-5 items-start md:items-center shadow-lg shadow-gray-100/50 transition-all`}>
           {bannerIcon}
@@ -411,10 +547,11 @@ export default function Dashboard({ result, url, templateName }: DashboardProps)
             )}
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Schema.org Knowledge Base UI */}
-      <div className="bg-gradient-to-br from-[#F0EEE9] via-[#EAE6DF] to-[#F0EEE9] rounded-2xl border border-navy/10 p-6 md:p-8 shadow-xl space-y-6 relative overflow-hidden">
+      {/* Section 2: Schema.org Knowledge Base UI */}
+      <section id="section-knowledge-base" className="scroll-mt-24 space-y-6">
+        <div className="bg-gradient-to-br from-[#F0EEE9] via-[#EAE6DF] to-[#F0EEE9] rounded-2xl border border-navy/10 p-6 md:p-8 shadow-xl space-y-6 relative overflow-hidden">
         {/* Abstract background graphics for high-end look */}
         <div className="absolute top-0 right-0 w-64 h-64 bg-radial-gradient from-[#C1D9F0]/20 to-transparent pointer-events-none rounded-full blur-3xl opacity-60" />
         
@@ -532,9 +669,12 @@ export default function Dashboard({ result, url, templateName }: DashboardProps)
           </div>
         </div>
       </div>
+      </section>
 
-      {/* Summary Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+      {/* Section 3: Detailed Audit Findings */}
+      <section id="section-audit-findings" className="scroll-mt-24 space-y-8">
+        {/* Sub-item: Summary Metrics */}
+        <div id="sub-metrics" className="scroll-mt-24 grid grid-cols-1 md:grid-cols-3 gap-8">
         <Card className="rounded-xl border-none bg-navy text-white overflow-hidden relative shadow-2xl shadow-navy/20">
           <div className="absolute top-0 right-0 p-4 opacity-10">
             <Target className="w-24 h-24" />
@@ -571,56 +711,8 @@ export default function Dashboard({ result, url, templateName }: DashboardProps)
         </Card>
       </div>
 
-      {/* Google Search Console Crosscheck Results */}
-      {result.gscAnalysis && result.gscAnalysis.length > 0 && (
-        <div className="space-y-6 animate-in fade-in duration-500">
-          <div className="flex items-center gap-3">
-            <div className="h-px flex-1 bg-gray-200" />
-            <h3 className="text-xs font-bold uppercase tracking-[0.3em] text-gray-400">Search Console Cross-Check</h3>
-            <div className="h-px flex-1 bg-gray-200" />
-          </div>
-
-          <Card className="rounded-2xl border bg-gradient-to-br from-amber-50/10 to-transparent border-amber-200/50 shadow-md">
-            <CardHeader className="bg-amber-500/5 border-b border-amber-200/20 py-4">
-              <CardTitle className="text-xs font-bold uppercase tracking-widest text-amber-800 flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-amber-600" />
-                Google Search Console Resolution Log
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-6 divide-y divide-gray-100">
-              {result.gscAnalysis.map((item, index) => (
-                <div key={index} className="py-5 first:pt-0 last:pb-0 flex flex-col md:flex-row gap-6 items-start">
-                  <div className="w-full md:w-1/3 space-y-2 shrink-0">
-                    <div className="flex items-center gap-2">
-                      <span className={`h-2.5 w-2.5 rounded-full ${item.severity === "error" ? "bg-red-500" : "bg-amber-500"}`} />
-                      <span className="text-xs font-bold uppercase tracking-wider text-navy">
-                        {item.severity === "error" ? "GSC Critical Error" : "GSC Warning"}
-                      </span>
-                    </div>
-                    <p className="text-sm font-bold text-navy font-heading pr-4 leading-snug">{item.issueDetected}</p>
-                  </div>
-                  <div className="flex-1 space-y-3">
-                    <div>
-                      <p className="text-[10px] uppercase font-bold text-gray-400 tracking-widest mb-1">Audit Findings</p>
-                      <p className="text-xs text-gray-600 leading-relaxed font-sans">{item.explanation}</p>
-                    </div>
-                    <div className="bg-green-50/50 p-4 rounded-xl border border-green-100/50">
-                      <p className="text-[10px] uppercase font-bold text-green-700 tracking-widest mb-1 flex items-center gap-1.5">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />
-                        Perfected Resolution
-                      </p>
-                      <p className="text-xs text-green-800 leading-relaxed font-sans font-medium">{item.resolution}</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* AI Confidence & Verification */}
-      <div className="space-y-4">
+      {/* Sub-item: AI Confidence & Verification */}
+      <div id="sub-verification" className="scroll-mt-24 space-y-4">
         <div className="flex flex-col md:flex-row gap-6 items-center bg-white/50 backdrop-blur-sm p-6 rounded-xl border border-white shadow-sm">
           <div className="flex items-center gap-3 shrink-0">
             <div className="bg-navy p-2 rounded-lg">
@@ -649,8 +741,8 @@ export default function Dashboard({ result, url, templateName }: DashboardProps)
         )}
       </div>
 
-      {/* Audit Cards */}
-      <div className="space-y-6">
+      {/* Sub-item: Audit Cards */}
+      <div id="sub-audit-cards" className="scroll-mt-24 space-y-6">
         <div className="flex items-center gap-3">
           <div className="h-px flex-1 bg-gray-200" />
           <h3 className="text-xs font-bold uppercase tracking-[0.3em] text-gray-400">Detailed Audit Findings</h3>
@@ -715,10 +807,11 @@ export default function Dashboard({ result, url, templateName }: DashboardProps)
           ))}
         </div>
       </div>
+      </section>
 
-      {/* Additional Recommendations */}
+      {/* Section 4: Strategic Schema Recommendation */}
       {result.additionalRecommendedSchema?.length > 0 && (
-        <div className="space-y-8">
+        <section id="section-strategic-recommendations" className="scroll-mt-24 space-y-8">
           <div className="flex items-center gap-3">
             <div className="h-px flex-1 bg-gray-200" />
             <h3 className="text-xs font-bold uppercase tracking-[0.3em] text-gray-400">Strategic Schema Expansion</h3>
@@ -751,29 +844,105 @@ export default function Dashboard({ result, url, templateName }: DashboardProps)
               </Card>
             ))}
           </div>
-        </div>
+        </section>
       )}
 
-      {/* AI Summaries */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <div className="space-y-3">
-          <h3 className="text-lg text-navy flex items-center gap-2">
-            <TrendingUp className="w-5 h-5" />
-            Executive TLDR
-          </h3>
-          <div className="prose prose-sm max-w-none bg-white p-6 rounded-sm border border-gray-200 shadow-sm">
-            <ReactMarkdown components={markdownComponents}>{result.executiveTldr || ""}</ReactMarkdown>
+      {/* Section 5: Master Build (Unified Schema Architecture) */}
+      <section id="section-master-build" className="scroll-mt-24 space-y-6">
+        <SchemaEditor 
+          schema={result.perfectedSchema} 
+          recommendations={result.additionalRecommendedSchema}
+          className="p-0 space-y-6"
+        />
+      </section>
+
+      {/* Section 6: Search Console Cross-Check (Moved towards the end as requested) */}
+      {result.gscAnalysis && result.gscAnalysis.length > 0 && (
+        <section id="section-search-console" className="scroll-mt-24 space-y-6 animate-in fade-in duration-500">
+          <div className="flex items-center gap-3">
+            <div className="h-px flex-1 bg-gray-200" />
+            <h3 className="text-xs font-bold uppercase tracking-[0.3em] text-gray-400">Search Console Cross-Check</h3>
+            <div className="h-px flex-1 bg-gray-200" />
+          </div>
+
+          <Card className="rounded-2xl border bg-gradient-to-br from-amber-50/10 to-transparent border-amber-200/50 shadow-md">
+            <CardHeader className="bg-amber-500/5 border-b border-amber-200/20 py-4">
+              <CardTitle className="text-xs font-bold uppercase tracking-widest text-amber-800 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600" />
+                Google Search Console Resolution Log
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-6 divide-y divide-gray-100">
+              {result.gscAnalysis.map((item, index) => (
+                <div key={index} className="py-5 first:pt-0 last:pb-0 flex flex-col md:flex-row gap-6 items-start">
+                  <div className="w-full md:w-1/3 space-y-2 shrink-0">
+                    <div className="flex items-center gap-2">
+                      <span className={`h-2.5 w-2.5 rounded-full ${item.severity === "error" ? "bg-red-500" : "bg-amber-500"}`} />
+                      <span className="text-xs font-bold uppercase tracking-wider text-navy">
+                        {item.severity === "error" ? "GSC Critical Error" : "GSC Warning"}
+                      </span>
+                    </div>
+                    <p className="text-sm font-bold text-navy font-heading pr-4 leading-snug">{item.issueDetected}</p>
+                  </div>
+                  <div className="flex-1 space-y-3">
+                    <div>
+                      <p className="text-[10px] uppercase font-bold text-gray-400 tracking-widest mb-1">Audit Findings</p>
+                      <p className="text-xs text-gray-600 leading-relaxed font-sans">{item.explanation}</p>
+                    </div>
+                    <div className="bg-green-50/50 p-4 rounded-xl border border-green-100/50">
+                      <p className="text-[10px] uppercase font-bold text-green-700 tracking-widest mb-1 flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />
+                        Perfected Resolution
+                      </p>
+                      <p className="text-xs text-green-800 leading-relaxed font-sans font-medium">{item.resolution}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </section>
+      )}
+
+      {/* Section 7: AI Summaries */}
+      <section id="section-executive-summary" className="scroll-mt-24 space-y-6">
+        <div className="flex items-center gap-3">
+          <div className="h-px flex-1 bg-gray-200" />
+          <h3 className="text-xs font-bold uppercase tracking-[0.3em] text-gray-400">Executive Synthesis</h3>
+          <div className="h-px flex-1 bg-gray-200" />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="space-y-3">
+            <h3 className="text-lg text-navy flex items-center gap-2">
+              <TrendingUp className="w-5 h-5" />
+              Executive TLDR
+            </h3>
+            <div className="prose prose-sm max-w-none bg-white p-6 rounded-sm border border-gray-200 shadow-sm">
+              <ReactMarkdown components={markdownComponents}>{result.executiveTldr || ""}</ReactMarkdown>
+            </div>
+          </div>
+          <div className="space-y-3">
+            <h3 className="text-lg text-navy flex items-center gap-2">
+              <Info className="w-5 h-5" />
+              ELI5 Summary
+            </h3>
+            <div className="prose prose-sm max-w-none bg-white p-6 rounded-sm border border-gray-200 shadow-sm">
+              <ReactMarkdown components={markdownComponents}>{result.eli5Summary || ""}</ReactMarkdown>
+            </div>
           </div>
         </div>
-        <div className="space-y-3">
-          <h3 className="text-lg text-navy flex items-center gap-2">
-            <Info className="w-5 h-5" />
-            ELI5 Summary
-          </h3>
-          <div className="prose prose-sm max-w-none bg-white p-6 rounded-sm border border-gray-200 shadow-sm">
-            <ReactMarkdown components={markdownComponents}>{result.eli5Summary || ""}</ReactMarkdown>
-          </div>
+      </section>
         </div>
+
+        {/* Right Sticky Column: Table of Contents navigation */}
+        <aside className="hidden lg:block lg:col-span-4 xl:col-span-3 sticky top-6 self-start z-20">
+          <TableOfContents 
+            activeSection={activeSection}
+            onSelectSection={scrollToSection}
+            metrics={tocMetrics}
+          />
+        </aside>
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { 
   Code2, 
   Zap, 
+  Activity,
   Lightbulb, 
   Copy, 
   Check, 
@@ -12,7 +13,6 @@ import {
   ChevronDown, 
   ChevronUp, 
   AlertTriangle, 
-  Activity, 
   Globe, 
   FileText, 
   FileUp, 
@@ -55,7 +55,6 @@ interface InputSectionProps {
   }) => void;
   isLoading: boolean;
   isCollapsed?: boolean;
-  lastManualDiagnosticDuration?: number | null;
 }
 
 const GSC_PRESETS = [
@@ -83,8 +82,7 @@ const SCHEMA_TYPES = [
 export default function InputSection({ 
   onAnalyze, 
   isLoading, 
-  isCollapsed: initialCollapsed = false,
-  lastManualDiagnosticDuration
+  isCollapsed: initialCollapsed = false
 }: InputSectionProps) {
   const [html, setHtml] = useState("");
   const [mode, setMode] = useState<"unified" | "split" | "pdf">("unified");
@@ -97,7 +95,7 @@ export default function InputSection({
   const [textCopied, setTextCopied] = useState(false);
   const [htmlCopied, setHtmlCopied] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(initialCollapsed);
-  const [selectedModel, setSelectedModel] = useState("gemini-2.5-flash");
+  const [selectedModel, setSelectedModel] = useState("gemini-3.8-flash");
   const [optimizationMode, setOptimizationMode] = useState<"speed" | "accuracy">("speed");
 
   // PDF Upload State
@@ -260,52 +258,6 @@ export default function InputSection({
       </div>
 
       <div className="max-w-6xl mx-auto relative z-10 p-12 lg:p-20 py-8 lg:py-12 space-y-8">
-        
-        {/* Adaptive Pace Telemetry Card */}
-        <div className="p-6 bg-navy text-white rounded-2xl shadow-xl shadow-navy/10 border border-white/10 flex flex-col md:flex-row items-center justify-between gap-6 transition-all hover:scale-[1.01] duration-300">
-          <div className="flex items-center gap-4">
-            <div className={`p-3.5 rounded-2xl shrink-0 ${lastManualDiagnosticDuration ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-amber-500/10 text-amber-400 border border-amber-500/20 animate-pulse"}`}>
-              <Activity className={`w-6 h-6 ${lastManualDiagnosticDuration ? "animate-pulse" : "animate-bounce"}`} />
-            </div>
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="relative flex h-2.5 w-2.5">
-                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${lastManualDiagnosticDuration ? "bg-emerald-400" : "bg-amber-400"}`}></span>
-                  <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${lastManualDiagnosticDuration ? "bg-emerald-500" : "bg-amber-500"}`}></span>
-                </span>
-                <span className="text-[9px] uppercase tracking-widest font-heading font-extrabold text-white/70">
-                  {lastManualDiagnosticDuration ? "Adaptive Pace Engine: Calibrated" : "Adaptive Pace Engine: Active Waiting"}
-                </span>
-              </div>
-              <h4 className="text-sm font-heading font-bold tracking-wide">
-                {lastManualDiagnosticDuration 
-                  ? "Crawl-pacing engine successfully calibrated to your server performance!" 
-                  : "Awaiting your first Manual Diagnostic audit to configure adaptive crawl queues."}
-              </h4>
-              <p className="text-[11px] text-white/70 leading-relaxed max-w-2xl">
-                {lastManualDiagnosticDuration 
-                  ? "We measured your last manual diagnostic analysis run-time. To prevent Gemini API rate limits in batch crawling, we auto-calculated a dynamic pacing interval (+30s safety buffer) for safe bulk jobs."
-                  : "To guarantee robust bulk audits without Gemini API quota exceptions, we track your manual audit run duration and dynamically sync a protective cooldown interval with our sequential crawler."}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-4 shrink-0 bg-white/5 p-4 rounded-xl border border-white/5 w-full md:w-auto justify-around md:justify-start">
-            <div className="text-center px-4 border-r border-white/10">
-              <span className="text-[9px] uppercase font-bold text-white/40 tracking-wider block mb-1">Last Speed</span>
-              <p className="text-lg font-mono font-extrabold text-lemon-icing">
-                {lastManualDiagnosticDuration ? `${(lastManualDiagnosticDuration / 1000).toFixed(1)}s` : "Pending"}
-              </p>
-            </div>
-            <div className="text-center px-4">
-              <span className="text-[9px] uppercase font-bold text-white/40 tracking-wider block mb-1">Queue Interval</span>
-              <p className="text-lg font-mono font-extrabold text-emerald-400">
-                {lastManualDiagnosticDuration ? `${((lastManualDiagnosticDuration + 30000) / 1000).toFixed(1)}s` : "Pending"}
-              </p>
-            </div>
-          </div>
-        </div>
-
         <div className="flex items-center justify-between mb-0">
           <div className="flex items-center gap-3">
             <div className="bg-navy p-2 rounded-lg shadow-lg shadow-navy/20 text-white animate-pulse">
@@ -772,7 +724,7 @@ export default function InputSection({
                         </Button>
                         
                         <p className="text-center text-[10px] text-gray-400 uppercase tracking-widest font-medium">
-                          Deep-content inspection powered by {selectedModel === "gemini-3.1-pro-preview" ? "Gemini 3.1 Pro" : selectedModel === "gemini-3.1-flash-lite" ? "Gemini 3.1 Flash Lite" : selectedModel === "gemini-2.5-flash-lite" ? "Gemini 2.5 Flash Lite" : selectedModel === "gemini-2.5-flash" ? "Gemini 2.5 Flash" : "Gemini 3.5 Flash"}
+                          Deep-content inspection powered by {selectedModel === "gemini-3.1-pro-preview" ? "Gemini 3.1 Pro" : selectedModel === "gemini-3.1-flash-lite" ? "Gemini 3.1 Flash Lite" : selectedModel === "gemini-3.7-flash" ? "Gemini 3.7 Flash" : selectedModel === "gemini-3.5-flash" ? "Gemini 3.5 Flash" : "Gemini 3.8 Flash"}
                         </p>
                       </div>
                     </div>
@@ -798,11 +750,14 @@ export default function InputSection({
                               <SelectValue placeholder="Select Model" />
                             </SelectTrigger>
                             <SelectContent className="rounded-xl border-none shadow-2xl bg-navy text-white">
-                              <SelectItem value="gemini-2.5-flash" className="text-xs font-medium focus:bg-white/10 focus:text-white">
-                                Gemini 2.5 Flash (Recommended - High Rate Limits)
+                              <SelectItem value="gemini-3.8-flash" className="text-xs font-medium focus:bg-white/10 focus:text-white">
+                                Gemini 3.8 Flash (Default - High Performance)
                               </SelectItem>
-                              <SelectItem value="gemini-2.5-flash-lite" className="text-xs font-medium focus:bg-white/10 focus:text-white">
-                                Gemini 2.5 Flash Lite (Ultra-Fast)
+                              <SelectItem value="gemini-3.1-flash-lite" className="text-xs font-medium focus:bg-white/10 focus:text-white">
+                                Gemini 3.1 Flash Lite (Ultra-Low Latency)
+                              </SelectItem>
+                              <SelectItem value="gemini-3.7-flash" className="text-xs font-medium focus:bg-white/10 focus:text-white">
+                                Gemini 3.7 Flash
                               </SelectItem>
                               <SelectItem value="gemini-3.5-flash" className="text-xs font-medium focus:bg-white/10 focus:text-white">
                                 Gemini 3.5 Flash
@@ -813,7 +768,7 @@ export default function InputSection({
                             </SelectContent>
                           </Select>
                           <p className="text-[10px] text-white/50 leading-relaxed">
-                            Flash Lite is highly optimized for fast latency. Pro delivers maximum depth but is slower.
+                            Gemini 3.8 Flash provides fast latency and robust schema extraction. Pro delivers maximum depth for nested graphs.
                           </p>
                         </div>
 

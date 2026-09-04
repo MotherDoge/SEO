@@ -12,9 +12,16 @@ interface SchemaEditorProps {
     reasoning: string;
     exampleSnippet: string;
   }[];
+  className?: string;
+  hideHeader?: boolean;
 }
 
-export default function SchemaEditor({ schema, recommendations = [] }: SchemaEditorProps) {
+export default function SchemaEditor({ 
+  schema, 
+  recommendations = [], 
+  className,
+  hideHeader = false 
+}: SchemaEditorProps) {
   const [copied, setCopied] = useState(false);
 
   const getMasterSchema = () => {
@@ -81,26 +88,28 @@ export default function SchemaEditor({ schema, recommendations = [] }: SchemaEdi
   };
 
   return (
-    <div className="p-8 max-w-6xl mx-auto space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <h3 className="text-lg text-navy flex items-center gap-2 uppercase font-bold">
-            <Code className="w-5 h-5" />
-            Strategic Master Build
-          </h3>
-          <p className="text-[10px] text-gray-400 uppercase font-bold tracking-widest">Unified Schema Architecture</p>
-        </div>
+    <div className={className || "p-8 max-w-6xl mx-auto space-y-6"}>
+      {!hideHeader && (
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <h3 className="text-lg text-navy flex items-center gap-2 uppercase font-bold">
+              <Code className="w-5 h-5" />
+              Strategic Master Build
+            </h3>
+            <p className="text-[10px] text-gray-400 uppercase font-bold tracking-widest">Unified Schema Architecture</p>
+          </div>
 
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={copyToClipboard}
-          className="rounded-lg border-navy text-navy hover:bg-navy hover:text-white transition-colors h-10 px-6"
-        >
-          {copied ? <Check className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />}
-          {copied ? "Copied!" : "Copy Master Code"}
-        </Button>
-      </div>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={copyToClipboard}
+            className="rounded-lg border-navy text-navy hover:bg-navy hover:text-white transition-colors h-10 px-6"
+          >
+            {copied ? <Check className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />}
+            {copied ? "Copied!" : "Copy Master Code"}
+          </Button>
+        </div>
+      )}
       
       <div className="relative group">
         <div className="w-full rounded-2xl border border-gray-200 bg-[#2d2d2d] overflow-x-auto shadow-2xl">

@@ -466,18 +466,33 @@ async function startServer() {
     }
   });
 
+  // Helper to map legacy/deprecated model names to current active Gemini models
+  function normalizeModelName(model?: string): string {
+    if (!model) return "gemini-3.8-flash";
+    const m = model.trim().toLowerCase();
+    if (m === "gemini-flash" || m === "gemini-flash-latest" || m === "gemini-2.5-flash" || m === "gemini-2.0-flash" || m === "gemini-1.5-flash") {
+      return "gemini-3.8-flash";
+    }
+    if (m === "gemini-2.5-flash-lite" || m === "gemini-flash-lite" || m === "gemini-lite") {
+      return "gemini-3.1-flash-lite";
+    }
+    if (m === "gemini-2.5-pro" || m === "gemini-1.5-pro" || m === "gemini-pro") {
+      return "gemini-3.1-pro-preview";
+    }
+    return model;
+  }
+
   // Helper to execute Gemini with automatic retries on transient errors (e.g. 503 UNAVAILABLE / high demand)
-  async function callGeminiWithRetry(ai: any, params: any, retries = 3, initialDelayMs = 1500): Promise<any> {
+  async function callGeminiWithRetry(ai: any, params: any, retries = 3, initialDelayMs = 1200): Promise<any> {
+    const primaryModel = normalizeModelName(params.model);
     const modelsToTry = Array.from(new Set([
-      params.model,
-      "gemini-2.5-flash",
-      "gemini-2.5-flash-lite",
-      "gemini-2.5-pro",
-      "gemini-3.5-flash",
+      primaryModel,
+      "gemini-3.8-flash",
       "gemini-3.1-flash-lite",
-      "gemini-3.1-pro-preview",
-      "gemini-2.0-flash",
-      "gemini-1.5-flash"
+      "gemini-flash-latest",
+      "gemini-3.7-flash",
+      "gemini-3.5-flash",
+      "gemini-3.1-pro-preview"
     ])).filter(Boolean);
 
     let lastErr;
@@ -512,27 +527,39 @@ async function startServer() {
             break; // Break inner loop immediately to try next model
           }
 
-          const isTransient = 
-            errMsg.includes("503") || 
-            errMsg.includes("UNAVAILABLE") || 
-            errMsg.includes("temporary") || 
-            errMsg.includes("high demand") || 
+          const isHighDemand =
+            errMsg.includes("503") ||
+            errMsg.includes("high demand") ||
             errMsg.includes("spikes in demand") ||
             errMsg.includes("overloaded") ||
             errStatus === "UNAVAILABLE" ||
             errCode === 503 ||
-            errCode === 429 ||
-            errMsg.includes("429") ||
             errStr.includes("503") ||
-            errStr.includes("429") ||
             errStr.includes("UNAVAILABLE");
 
-          if (isTransient && attempt < retries) {
+          const isTransient = 
+            isHighDemand ||
+            errMsg.includes("temporary") || 
+            errCode === 429 ||
+            errMsg.includes("429") ||
+            errStr.includes("429");
+
+          if (isHighDemand) {
+            // High demand indicates cluster congestion for this specific model.
+            // Give 1 quick retry, then immediately failover to another healthy model in the pool.
+            if (attempt < 2) {
+              console.warn(`[Gemini API] Model ${modelName} experiencing high demand (503). Retrying in 600ms before switching...`);
+              await new Promise(resolve => setTimeout(resolve, 600));
+            } else {
+              console.warn(`[Gemini API] Model ${modelName} still congested after attempt 2. Switching immediately to next available model in cluster...`);
+              break;
+            }
+          } else if (isTransient && attempt < retries) {
             console.warn(`[Gemini API] Transient error (model: ${modelName}, attempt ${attempt}/${retries}): ${errMsg || errStr}. Retrying in ${delay}ms...`);
             await new Promise(resolve => setTimeout(resolve, delay));
             delay *= 2; // Exponential backoff
           } else if (isTransient && attempt === retries) {
-             console.warn(`[Gemini API] Model ${modelName} failed after ${retries} attempts due to high demand. Trying next model...`);
+             console.warn(`[Gemini API] Model ${modelName} failed after ${retries} attempts. Trying next model...`);
              break; // Break inner loop, try next model in the list
           } else {
             // Check if model is unsupported (e.g. 404 or 400), if so, skip to next model
@@ -572,7 +599,7 @@ async function startServer() {
     }
 
     try {
-      console.log(`Auditing schema for URL: ${url || "snippet"} using model: ${selectedModel || "gemini-3.5-flash"} in ${optimizationMode || "accuracy"} mode`);
+      console.log(`Auditing schema for URL: ${url || "snippet"} using model: ${selectedModel || "gemini-3.8-flash"} in ${optimizationMode || "accuracy"} mode`);
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey || apiKey === "MY_GEMINI_API_KEY" || apiKey.trim() === "" || apiKey === "undefined") {
         throw new Error("GEMINI_API_KEY environment variable is missing, undefined, or set to a placeholder on the server. Please open the Settings panel (gear icon) -> Secrets in the top right of the Google AI Studio UI, make sure your GEMINI_API_KEY is defined with a valid active Google Gemini API Key, then save changes.");
@@ -813,7 +840,7 @@ async function startServer() {
       }
 
       const response = await callGeminiWithRetry(ai, {
-        model: selectedModel || "gemini-3.5-flash",
+        model: selectedModel || "gemini-3.8-flash",
         contents: prompt,
         config: {
           temperature: 0.2,

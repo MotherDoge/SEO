@@ -47,7 +47,6 @@ interface BatchProcessorProps {
   onBatchProcessed: (tasks: AuditTask[]) => void;
   onBatchComplete: (tasks: AuditTask[]) => void;
   onViewResult: (task: AuditTask, currentTasks: AuditTask[]) => void;
-  lastManualDiagnosticDuration?: number | null;
 }
 
 export interface AuditTask {
@@ -65,8 +64,7 @@ export default function BatchProcessor({
   initialTasks = [], 
   onBatchProcessed, 
   onBatchComplete, 
-  onViewResult,
-  lastManualDiagnosticDuration 
+  onViewResult
 }: BatchProcessorProps) {
   const [tasks, setTasks] = useState<AuditTask[]>(initialTasks);
   const [isParsing, setIsParsing] = useState(false);
@@ -78,17 +76,14 @@ export default function BatchProcessor({
   const [currentTaskIndex, setCurrentTaskIndex] = useState<number | null>(null);
   const [copiedTaskId, setCopiedTaskId] = useState<string | null>(null);
   const [throttleDelay, setThrottleDelay] = useState(6000); // stay safely under 15 RPM (6 seconds)
-  const [isAdaptiveMode, setIsAdaptiveMode] = useState(true);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [baseUrl, setBaseUrl] = useState<string>("");
-  const [selectedModel, setSelectedModel] = useState("gemini-3.5-flash");
+  const [selectedModel, setSelectedModel] = useState("gemini-3.8-flash");
   const [optimizationMode, setOptimizationMode] = useState<"speed" | "accuracy">("speed");
   const [concurrency, setConcurrency] = useState<number>(1);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const activeDelay = (isAdaptiveMode && lastManualDiagnosticDuration)
-    ? lastManualDiagnosticDuration + 30000
-    : throttleDelay;
+  const activeDelay = throttleDelay;
 
   const isRunningRef = useRef(isRunning);
   const isPausedRef = useRef(isPaused);
@@ -600,49 +595,8 @@ export default function BatchProcessor({
       {showSettings && (
         <div className="px-8 py-6 bg-cloud-dancer/30 border-b border-gray-100 flex flex-col md:flex-row gap-8 items-start justify-between animate-in fade-in slide-in-from-top-4 duration-200">
           <div className="w-full md:w-1/2 space-y-4">
-            {/* Adaptive Spacing Toggle and Info Card */}
-            {lastManualDiagnosticDuration ? (
-              <div className="bg-white/80 backdrop-blur-sm border border-emerald-200 p-4 rounded-xl space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                    Adaptive Pace Engine Active
-                  </span>
-                  <Button
-                    variant={isAdaptiveMode ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setIsAdaptiveMode(!isAdaptiveMode)}
-                    disabled={isRunning}
-                    className={`rounded-lg px-3 h-7 text-[10px] font-bold uppercase tracking-wider transition-all ${isAdaptiveMode ? "bg-emerald-600 hover:bg-emerald-500 text-white" : "border-navy text-navy hover:bg-navy hover:text-white"}`}
-                  >
-                    {isAdaptiveMode ? "Adaptive: ON" : "Use Manual"}
-                  </Button>
-                </div>
-                <div className="text-xs space-y-1">
-                  <p className="font-heading font-bold text-navy">
-                    Measured Manual Run: <span className="text-emerald-700">{(lastManualDiagnosticDuration / 1000).toFixed(1)}s</span>
-                  </p>
-                  <p className="text-[10px] text-gray-500 leading-normal">
-                    Adding a +30s safety buffer results in a dynamic spacing of <span className="font-bold text-navy font-mono">{((lastManualDiagnosticDuration + 30000) / 1000).toFixed(1)}s</span>. This ensures robust crawl queue performance and safeguards against Gemini API rate limits.
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="bg-amber-50/50 border border-amber-200/60 p-4 rounded-xl space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
-                  </span>
-                  <span className="text-[10px] uppercase font-bold text-amber-800 tracking-wider">Adaptive Space Engine Offline</span>
-                </div>
-                <p className="text-[10px] text-gray-600 leading-relaxed">
-                  Run a <strong>Manual Diagnostic Analysis</strong> first! We will measure its exact execution duration and automatically configure an adaptive delay with a +30s safety buffer.
-                </p>
-              </div>
-            )}
-
-            {/* Manual Throttle Control Panel (disabled if adaptive mode is active) */}
-            <div className={`space-y-3 transition-opacity duration-200 ${isAdaptiveMode && lastManualDiagnosticDuration ? "opacity-50" : "opacity-100"}`}>
+            {/* Throttle Control Panel */}
+            <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-heading font-bold text-navy tracking-wider block uppercase">
                   API Throttling Spacing: <span className="text-orange">{throttleDelay / 1000}s Delay</span>
@@ -659,7 +613,7 @@ export default function BatchProcessor({
                   step="500"
                   value={throttleDelay} 
                   onChange={(e) => setThrottleDelay(Number(e.target.value))}
-                  disabled={isRunning || (isAdaptiveMode && !!lastManualDiagnosticDuration)}
+                  disabled={isRunning}
                   className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-navy"
                 />
                 <span className="text-xs font-mono font-bold text-navy shrink-0 w-12 text-right">{(throttleDelay / 1000).toFixed(1)}s</span>
@@ -711,11 +665,14 @@ export default function BatchProcessor({
                     <SelectValue placeholder="Select Model" />
                   </SelectTrigger>
                   <SelectContent className="rounded-xl border border-gray-100 shadow-2xl bg-white text-navy">
-                    <SelectItem value="gemini-2.5-flash" className="text-xs font-medium focus:bg-cloud-dancer focus:text-navy">
-                      Gemini 2.5 Flash (Recommended - High Rate Limits)
+                    <SelectItem value="gemini-3.8-flash" className="text-xs font-medium focus:bg-cloud-dancer focus:text-navy">
+                      Gemini 3.8 Flash (Default - High Performance)
                     </SelectItem>
-                    <SelectItem value="gemini-2.5-flash-lite" className="text-xs font-medium focus:bg-cloud-dancer focus:text-navy">
-                      Gemini 2.5 Flash Lite (Ultra-Fast)
+                    <SelectItem value="gemini-3.1-flash-lite" className="text-xs font-medium focus:bg-cloud-dancer focus:text-navy">
+                      Gemini 3.1 Flash Lite (Ultra-Low Latency)
+                    </SelectItem>
+                    <SelectItem value="gemini-3.7-flash" className="text-xs font-medium focus:bg-cloud-dancer focus:text-navy">
+                      Gemini 3.7 Flash
                     </SelectItem>
                     <SelectItem value="gemini-3.5-flash" className="text-xs font-medium focus:bg-cloud-dancer focus:text-navy">
                       Gemini 3.5 Flash
@@ -726,7 +683,7 @@ export default function BatchProcessor({
                   </SelectContent>
                 </Select>
                 <p className="text-[10px] text-gray-400 leading-relaxed">
-                  Flash Lite is optimized for minimal latency. Pro is slower but offers full, rigorous reasoning.
+                  Gemini 3.8 Flash provides fast latency and robust schema extraction. Pro offers full reasoning depth.
                 </p>
               </div>
 
