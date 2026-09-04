@@ -43,7 +43,8 @@ import {
   HelpCircle,
   Compass,
   FileText,
-  RefreshCw
+  RefreshCw,
+  ArrowLeft
 } from "lucide-react";
 
 export interface ModelAttempt {
@@ -563,6 +564,37 @@ export default function App() {
   const [nestedLevelFilter, setNestedLevelFilter] = useState<string>("all");
   const [nestedCopySuccess, setNestedCopySuccess] = useState(false);
   const [nestedPushSuccess, setNestedPushSuccess] = useState(false);
+
+  // --- Home Page & Domain Inspector States ---
+  const [currentView, setCurrentView] = useState<"home" | "workspace">("home");
+  const [homeAction, setHomeAction] = useState<"domain" | "menu">("domain");
+  const [domainInput, setDomainInput] = useState("");
+  const [isInspectingDomain, setIsInspectingDomain] = useState(false);
+  const [inspectStatusStep, setInspectStatusStep] = useState("");
+  const [inspectError, setInspectError] = useState<string | null>(null);
+  const [inspectedDomainData, setInspectedDomainData] = useState<{
+    domain: string;
+    origin: string;
+    robotsUrl: string;
+    robotsFound: boolean;
+    sitemapsFromRobots: string[];
+    discoveredSitemapUrls: string[];
+    sitemapDetails: Array<{
+      url: string;
+      isIndex: boolean;
+      childCount: number;
+      sampleChildren: string[];
+      hasNestedSitemaps: boolean;
+      leafUrlCount?: number;
+      error?: string;
+    }>;
+    nestedSitemaps: string[];
+    hasMultipleSitemaps: boolean;
+    hasNestedSitemaps: boolean;
+    totalNestedCount: number;
+    configurationSummary: string;
+    suggestedUrlsToCrawl: string[];
+  } | null>(null);
 
 
 
@@ -1738,19 +1770,468 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
+  const handleInspectDomain = async (targetDomain?: string) => {
+    const dom = (targetDomain || domainInput).trim();
+    if (!dom) {
+      setInspectError("Please enter a domain name.");
+      return;
+    }
+    setDomainInput(dom);
+    setIsInspectingDomain(true);
+    setInspectError(null);
+    setInspectedDomainData(null);
+    setInspectStatusStep(`Inspecting ${dom.replace(/^https?:\/\//, '')}/robots.txt...`);
+
+    try {
+      const response = await fetch("/api/inspect-domain", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ domain: dom })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setInspectError(data.error || "Failed to inspect domain.");
+        return;
+      }
+
+      setInspectedDomainData(data);
+    } catch (err: any) {
+      setInspectError(err.message || "Failed to connect to domain inspection service.");
+    } finally {
+      setIsInspectingDomain(false);
+      setInspectStatusStep("");
+    }
+  };
+
+  const handleConfirmConfiguration = async () => {
+    if (!inspectedDomainData) return;
+
+    setCurrentView("workspace");
+    setActiveTab("templates");
+    setIsAnalyzing(true);
+    setError(null);
+    setResult(null);
+
+    // Pick discovered sitemaps or nested child sitemaps
+    const sitemapsToFetch = inspectedDomainData.nestedSitemaps && inspectedDomainData.nestedSitemaps.length > 0
+      ? inspectedDomainData.nestedSitemaps.slice(0, 15)
+      : (inspectedDomainData.discoveredSitemapUrls || []);
+
+    setSitemapUrl(sitemapsToFetch.join("\n"));
+
+    let allFetchedUrls: string[] = [];
+
+    try {
+      // Parallel fetch with concurrency pool of 4
+      await mapConcurrent(sitemapsToFetch.slice(0, 8), 4, async (smUrl) => {
+        try {
+          const res = await fetch("/api/fetch-sitemap", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: smUrl })
+          });
+          const d = await res.json();
+          if (res.ok && Array.isArray(d.urls)) {
+            allFetchedUrls.push(...d.urls);
+          }
+        } catch {
+          // Ignore individual fetch errors
+        }
+      });
+
+      const uniqueUrls = Array.from(new Set(allFetchedUrls));
+      if (uniqueUrls.length > 0) {
+        setUrls(uniqueUrls.join("\n"));
+        // Analyze extracted URLs
+        const sampledUrls = uniqueUrls.slice(0, 2000);
+        const res = await fetch("/api/analyze-urls", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ urlsToAnalyze: sampledUrls.join("\n") })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          const normalized = normalizeResult(data);
+          setResult(normalized);
+          setRunHistory(prev => [{ date: new Date().toISOString(), result: normalized }, ...prev]);
+        } else {
+          setError(data.error || "Analysis failed.");
+        }
+      } else {
+        // Fallback: If sitemaps had no direct URLs or were blocked, feed the sitemap URLs themselves
+        if (sitemapsToFetch.length > 0) {
+          setUrls(sitemapsToFetch.join("\n"));
+          const res = await fetch("/api/analyze-urls", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ urlsToAnalyze: sitemapsToFetch.join("\n") })
+          });
+          const data = await res.json();
+          if (res.ok) {
+            const normalized = normalizeResult(data);
+            setResult(normalized);
+            setRunHistory(prev => [{ date: new Date().toISOString(), result: normalized }, ...prev]);
+          }
+        } else {
+          setError("No URLs could be extracted. You can paste URLs or use Direct Site Menu Crawler.");
+        }
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to complete analysis.");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const renderHomePage = () => {
+    return (
+      <div className="flex-1 bg-[#FAF9F5] overflow-y-auto px-4 py-12 flex flex-col items-center justify-start">
+        <div className="w-full max-w-xl flex flex-col items-center text-center">
+          
+          {/* Main Question - Claude style */}
+          <h1 className="text-2xl sm:text-3xl font-heading font-medium text-slate-900 tracking-tight mb-8">
+            What would you like to do?
+          </h1>
+
+          {/* Two Big Buttons! */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full mb-6">
+            {/* Big Button 1: Enter your domain */}
+            <button
+              onClick={() => {
+                setHomeAction("domain");
+                setInspectError(null);
+              }}
+              className={`p-5 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                homeAction === "domain"
+                  ? "border-[#2563EB] bg-white ring-2 ring-[#2563EB]/10 shadow-sm"
+                  : "border-navy/10 bg-white hover:border-navy/30 hover:shadow-sm"
+              }`}
+            >
+              <div>
+                <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-[#2563EB] mb-3">
+                  <Globe className="w-5 h-5" />
+                </div>
+                <div className="font-bold text-sm text-slate-800 font-heading">
+                  Enter your domain
+                </div>
+                <div className="text-xs text-gray-500 mt-1 leading-relaxed">
+                  Auto-fetch robots.txt & discover nested sitemaps
+                </div>
+              </div>
+              <div className="mt-4 flex items-center gap-1 text-[11px] font-bold text-[#2563EB]">
+                <span>Start with domain</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </div>
+            </button>
+
+            {/* Big Button 2: Scan navigation menu */}
+            <button
+              onClick={() => {
+                setHomeAction("menu");
+                setInspectError(null);
+              }}
+              className={`p-5 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                homeAction === "menu"
+                  ? "border-[#2563EB] bg-white ring-2 ring-[#2563EB]/10 shadow-sm"
+                  : "border-navy/10 bg-white hover:border-navy/30 hover:shadow-sm"
+              }`}
+            >
+              <div>
+                <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 mb-3">
+                  <Compass className="w-5 h-5" />
+                </div>
+                <div className="font-bold text-sm text-slate-800 font-heading">
+                  Scan navigation menu
+                </div>
+                <div className="text-xs text-gray-500 mt-1 leading-relaxed">
+                  Crawl header & footer navigation structure
+                </div>
+              </div>
+              <div className="mt-4 flex items-center gap-1 text-[11px] font-bold text-indigo-600">
+                <span>Crawl nav menus</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </div>
+            </button>
+          </div>
+
+          {/* Action Interface Area */}
+          {homeAction === "domain" && (
+            <div className="w-full space-y-4">
+              {!inspectedDomainData ? (
+                <div className="bg-white border border-navy/10 rounded-2xl p-5 shadow-sm text-left space-y-3">
+                  <label className="text-xs font-bold text-slate-700 block">
+                    Domain
+                  </label>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input
+                      type="text"
+                      value={domainInput}
+                      onChange={(e) => setDomainInput(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleInspectDomain()}
+                      placeholder="e.g. asana.com, truist.com, or zillow.com"
+                      className="flex-grow px-4 py-2.5 bg-cloud-dancer/50 border border-navy/10 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] font-medium transition-all"
+                    />
+                    <button
+                      onClick={() => handleInspectDomain()}
+                      disabled={isInspectingDomain || !domainInput.trim()}
+                      className="px-5 py-2.5 bg-[#2563EB] hover:bg-[#1D4ED8] text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer shadow-sm shrink-0"
+                    >
+                      {isInspectingDomain ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                      {isInspectingDomain ? "Fetching robots.txt..." : "Inspect Domain"}
+                    </button>
+                  </div>
+
+                  {/* Quick try options */}
+                  <div className="flex items-center gap-2 pt-1 text-[11px] text-gray-400">
+                    <span>Quick try:</span>
+                    <button
+                      onClick={() => { setDomainInput("asana.com"); handleInspectDomain("asana.com"); }}
+                      className="px-2 py-0.5 bg-cloud-dancer hover:bg-gray-200 rounded text-navy font-semibold transition-colors cursor-pointer"
+                    >
+                      asana.com
+                    </button>
+                    <button
+                      onClick={() => { setDomainInput("truist.com"); handleInspectDomain("truist.com"); }}
+                      className="px-2 py-0.5 bg-cloud-dancer hover:bg-gray-200 rounded text-navy font-semibold transition-colors cursor-pointer"
+                    >
+                      truist.com
+                    </button>
+                    <button
+                      onClick={() => { setDomainInput("zillow.com"); handleInspectDomain("zillow.com"); }}
+                      className="px-2 py-0.5 bg-cloud-dancer hover:bg-gray-200 rounded text-navy font-semibold transition-colors cursor-pointer"
+                    >
+                      zillow.com
+                    </button>
+                  </div>
+
+                  {isInspectingDomain && (
+                    <div className="flex items-center gap-2 text-xs text-blue-700 bg-blue-50 border border-blue-100 p-3 rounded-xl animate-fadeIn">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600 shrink-0" />
+                      <span>{inspectStatusStep || "Fetching {domain.com}/robots.txt & resolving sitemaps..."}</span>
+                    </div>
+                  )}
+
+                  {inspectError && (
+                    <div className="flex items-center gap-2 text-xs text-rose-700 bg-rose-50 border border-rose-100 p-3 rounded-xl animate-fadeIn">
+                      <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                      <span>{inspectError}</span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* The Configuration Prompt Card */
+                <div className="bg-white border border-blue-200 rounded-2xl p-6 shadow-sm text-left space-y-4 animate-fadeIn">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <span className="text-[10px] font-bold text-blue-600 uppercase tracking-widest block mb-1">
+                        Configuration Detected
+                      </span>
+                      <h3 className="text-base font-bold text-slate-800 font-heading">
+                        Would you like to continue with this configuration?
+                      </h3>
+                    </div>
+                    <button
+                      onClick={() => { setInspectedDomainData(null); }}
+                      className="text-xs text-gray-400 hover:text-navy cursor-pointer"
+                    >
+                      Change
+                    </button>
+                  </div>
+
+                  <div className="bg-blue-50/60 border border-blue-100 rounded-xl p-4 space-y-2.5 text-xs text-slate-700">
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500 font-medium">Target Domain:</span>
+                      <span className="font-mono font-bold text-navy">{inspectedDomainData.domain}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500 font-medium">Robots.txt rule:</span>
+                      <span className="font-mono text-slate-600">
+                        {inspectedDomainData.robotsFound ? (
+                          <span className="text-[#059669] font-semibold flex items-center gap-1">
+                            <Check className="w-3.5 h-3.5" />
+                            {inspectedDomainData.domain}/robots.txt
+                          </span>
+                        ) : (
+                          <span className="text-gray-500">None found (fallback to sitemap.xml)</span>
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500 font-medium">Discovered Sitemaps:</span>
+                      <span className="font-bold text-navy">
+                        {inspectedDomainData.discoveredSitemapUrls.length} root sitemap(s)
+                      </span>
+                    </div>
+                    {inspectedDomainData.hasNestedSitemaps && (
+                      <div className="pt-1 border-t border-blue-100">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-gray-500 font-medium">Nested sitemaps identified:</span>
+                          <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded font-bold text-[11px]">
+                            {inspectedDomainData.totalNestedCount} nested sub-sitemaps
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pt-1">
+                          {inspectedDomainData.nestedSitemaps.slice(0, 8).map((sm, i) => (
+                            <span key={i} className="font-mono text-[10px] bg-white border border-blue-200 px-2 py-0.5 rounded text-gray-600 truncate max-w-[200px]" title={sm}>
+                              {sm.split('/').pop() || sm}
+                            </span>
+                          ))}
+                          {inspectedDomainData.nestedSitemaps.length > 8 && (
+                            <span className="text-[10px] text-gray-400 self-center">
+                              +{inspectedDomainData.nestedSitemaps.length - 8} more
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-center gap-3 pt-1">
+                    <button
+                      onClick={handleConfirmConfiguration}
+                      disabled={isAnalyzing}
+                      className="w-full sm:flex-1 py-3 px-5 bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+                      {isAnalyzing ? "Crawling & Analyzing..." : "Continue with this configuration"}
+                    </button>
+                    <button
+                      onClick={() => { setInspectedDomainData(null); }}
+                      className="w-full sm:w-auto py-3 px-4 bg-white border border-navy/10 text-slate-700 hover:bg-cloud-dancer font-bold text-xs rounded-xl transition-colors cursor-pointer text-center"
+                    >
+                      Change domain
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {homeAction === "menu" && (
+            <div className="w-full bg-white border border-navy/10 rounded-2xl p-5 shadow-sm text-left space-y-3">
+              <label className="text-xs font-bold text-slate-700 block">
+                Website Homepage
+              </label>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="text"
+                  value={homepageUrl}
+                  onChange={(e) => setHomepageUrl(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && homepageUrl.trim()) {
+                      setCurrentView("workspace");
+                      setActiveTab("menu_templates");
+                      handleCrawlAndAnalyzeMenu();
+                    }
+                  }}
+                  placeholder="e.g. truist.com or https://truist.com"
+                  className="flex-grow px-4 py-2.5 bg-cloud-dancer/50 border border-navy/10 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] font-medium transition-all"
+                />
+                <button
+                  onClick={() => {
+                    setCurrentView("workspace");
+                    setActiveTab("menu_templates");
+                    handleCrawlAndAnalyzeMenu();
+                  }}
+                  disabled={isMenuAnalyzing || !homepageUrl.trim()}
+                  className="px-5 py-2.5 bg-[#2563EB] hover:bg-[#1D4ED8] text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer shadow-sm shrink-0"
+                >
+                  {isMenuAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                  {isMenuAnalyzing ? "Analyzing..." : "Scan & Architect"}
+                </button>
+              </div>
+              <div className="flex items-center gap-2 pt-1 text-[11px] text-gray-400">
+                <span>Quick try:</span>
+                <button
+                  onClick={() => {
+                    setHomepageUrl("https://www.truist.com");
+                  }}
+                  className="px-2 py-0.5 bg-cloud-dancer hover:bg-gray-200 rounded text-navy font-semibold transition-colors cursor-pointer"
+                >
+                  truist.com
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Quick link to workspace */}
+          <div className="mt-4">
+            <button
+              onClick={() => setCurrentView("workspace")}
+              className="text-xs text-gray-400 hover:text-navy transition-colors cursor-pointer"
+            >
+              Or enter URLs or sitemaps manually in workspace &rarr;
+            </button>
+          </div>
+
+          {/* Section below: Other tools in workflow */}
+          <div className="mt-14 pt-8 border-t border-navy/10 w-full text-left">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3 font-sans">
+              Other tools in workflow
+            </h3>
+            <div className="bg-white border border-navy/10 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm hover:border-navy/20 transition-all">
+              <div>
+                <h4 className="font-bold text-sm text-slate-800 font-heading">Schema architect</h4>
+                <p className="text-xs text-gray-500 mt-0.5 font-medium">Detect and recommend schema</p>
+              </div>
+              <a
+                href="https://ai.studio/apps/94f6d44f-1754-4253-87b9-a34f3461dc98"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-[#2563EB] hover:bg-[#1D4ED8] text-white rounded-xl text-xs font-bold uppercase tracking-wider shadow-sm transition-all cursor-pointer shrink-0"
+              >
+                <span>Schema architect</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen flex flex-col font-sans">
       {/* Navigation */}
       <nav className="h-16 bg-white border-b border-navy/10 flex items-center px-6 justify-between shrink-0 shadow-sm z-10">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-navy rounded-lg flex items-center justify-center">
-            <Database className="w-5 h-5 text-white" />
-          </div>
-          <span className="font-bold text-xl text-navy tracking-tight uppercase font-heading">Page Template Identifier for Schema</span>
+          <button
+            onClick={() => setCurrentView("home")}
+            className="flex items-center gap-3 text-left cursor-pointer hover:opacity-85 transition-opacity"
+            title="Return to Home"
+          >
+            <div className="w-8 h-8 bg-navy rounded-lg flex items-center justify-center">
+              <Database className="w-5 h-5 text-white" />
+            </div>
+            <span className="font-bold text-xl text-navy tracking-tight uppercase font-heading">Page Template Identifier</span>
+          </button>
         </div>
         
-        <div className="flex items-center gap-4">
-          {result && (
+        <div className="flex items-center gap-3">
+          {currentView === "workspace" && (
+            <button
+              onClick={() => setCurrentView("home")}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-white border border-navy/10 rounded-full text-xs font-semibold text-navy hover:bg-cloud-dancer transition-colors cursor-pointer"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              Home
+            </button>
+          )}
+
+          {result && currentView === "home" && (
+            <button
+              onClick={() => setCurrentView("workspace")}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-50 border border-blue-200 rounded-full text-xs font-semibold text-blue-700 hover:bg-blue-100 transition-colors cursor-pointer"
+            >
+              <Layers className="w-3.5 h-3.5" />
+              View Results ({result.domain_analyzed})
+            </button>
+          )}
+
+          {result && currentView === "workspace" && (
             <>
               <div className="bg-ice-melt/20 text-navy px-3 py-1.5 rounded-full text-sm font-semibold border border-ice-melt/30">
                 analyzing: {result.domain_analyzed}
@@ -1765,25 +2246,18 @@ export default function App() {
           )}
           <button
             onClick={() => setIsHistoryOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-navy/10 rounded-full text-sm font-semibold text-navy hover:bg-cloud-dancer transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-navy/10 rounded-full text-sm font-semibold text-navy hover:bg-cloud-dancer transition-colors cursor-pointer"
           >
             <History className="w-4 h-4" />
             Runs history
           </button>
-          <button
-            onClick={() => {
-              fetchQuotaStats();
-              setIsQuotaOpen(true);
-            }}
-            className="flex items-center gap-2 px-4 py-2 bg-[#FDE9AC]/40 border border-[#FDE9AC] rounded-full text-sm font-semibold text-[#6B4E00] hover:bg-[#FDE9AC]/60 transition-colors shadow-sm"
-          >
-            <Activity className="w-4 h-4 text-[#D97706] animate-pulse" />
-            API Console & Quotas
-          </button>
         </div>
       </nav>
 
-      <div className="flex-grow grid grid-cols-[280px_1fr] overflow-hidden">
+      {currentView === "home" ? (
+        renderHomePage()
+      ) : (
+        <div className="flex-grow grid grid-cols-[280px_1fr] overflow-hidden">
         {/* Sidebar */}
         <aside className="bg-white border-r border-navy/10 p-6 overflow-y-auto">
           <h3 className="text-sm font-bold text-slate-text uppercase tracking-wider mb-6 font-heading">Crawler Overview</h3>
@@ -1799,19 +2273,12 @@ export default function App() {
             </div>
           </div>
 
-          <div className="text-[11px] text-gray-400 leading-relaxed bg-cloud-dancer p-4 rounded-xl border border-navy/10 font-medium">
-            Identification logic based on structural subdirectories and slug keyword frequency.
-          </div>
-
           <div className="mt-8">
             <h3 className="text-[10px] font-bold text-[#2563EB] uppercase tracking-widest bg-white mb-4 flex items-center gap-1.5">
               <Globe className="w-3.5 h-3.5 text-[#2563EB]" />
               Direct Site Menu Crawler
             </h3>
             <div className="flex flex-col gap-2 mb-6 bg-blue-50/50 p-3 rounded-xl border border-blue-100">
-              <p className="text-[9.5px] text-blue-700/80 mb-1 leading-relaxed">
-                Scan navigation menus (e.g. truist.com, asana.com), classify page templates, and recommend tailored Schema.org types.
-              </p>
               <input
                 type="text"
                 value={homepageUrl}
@@ -2488,6 +2955,7 @@ export default function App() {
           )}
         </main>
       </div>
+      )}
 
       {/* Runs History Sidebar Overlay */}
       <AnimatePresence>

@@ -245,6 +245,193 @@ async function startServer() {
     }
   });
 
+  // API endpoint to inspect domain, fetch robots.txt, discover sitemaps and detect nested hierarchies
+  app.post("/api/inspect-domain", async (req, res) => {
+    const { domain } = req.body;
+
+    if (!domain || typeof domain !== 'string') {
+      return res.status(400).json({ error: "Domain is required" });
+    }
+
+    let cleanDomain = domain.trim().toLowerCase();
+    cleanDomain = cleanDomain.replace(/^https?:\/\//, '').replace(/\/.*$/, '').trim();
+
+    if (!cleanDomain) {
+      return res.status(400).json({ error: "Please enter a valid domain (e.g. example.com)" });
+    }
+
+    const origin = `https://${cleanDomain}`;
+    const robotsUrl = `${origin}/robots.txt`;
+
+    let robotsFound = false;
+    let robotsText = "";
+    const sitemapsFromRobots: string[] = [];
+
+    const ua = "Mozilla/5.0 (compatible; ClarityBot/9.0; +https://www.seoclarity.net/bot.html)";
+
+    // 1. Fetch robots.txt
+    try {
+      const response = await axios.get(robotsUrl, {
+        headers: {
+          'User-Agent': ua,
+          'Accept': 'text/plain,text/html,*/*;q=0.8'
+        },
+        timeout: 10000,
+        maxRedirects: 5,
+        validateStatus: (status) => status < 400
+      });
+
+      if (response.data && typeof response.data === 'string') {
+        robotsText = response.data;
+        robotsFound = true;
+      }
+    } catch (err: any) {
+      // Try curl fallback for robots.txt if blocked by simple axios
+      try {
+        const escapedUrl = robotsUrl.replace(/'/g, "'\\''");
+        const cmd = `curl -L -s -k -m 12 -A '${ua}' '${escapedUrl}'`;
+        const { stdout } = await execPromise(cmd, { maxBuffer: 5 * 1024 * 1024 });
+        if (stdout && stdout.length > 0 && !stdout.toLowerCase().startsWith('<!doctype html') && !stdout.toLowerCase().startsWith('<html')) {
+          robotsText = stdout;
+          robotsFound = true;
+        }
+      } catch (curlErr: any) {
+        console.warn(`[Inspect Domain] Robots fetch failed for ${robotsUrl}:`, err.message);
+      }
+    }
+
+    // 2. Parse Sitemap directives from robots.txt
+    if (robotsFound && robotsText) {
+      const lines = robotsText.split(/\r?\n/);
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (/^sitemap:\s*/i.test(trimmed)) {
+          const parts = trimmed.split(/:\s*/);
+          if (parts.length >= 2) {
+            const rawUrl = parts.slice(1).join(':').trim();
+            if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
+              sitemapsFromRobots.push(rawUrl);
+            }
+          }
+        }
+      }
+    }
+
+    // Deduplicate
+    let discoveredSitemapUrls = Array.from(new Set(sitemapsFromRobots));
+
+    // 3. Fallback to standard sitemap.xml if none declared in robots.txt
+    if (discoveredSitemapUrls.length === 0) {
+      const fallbackCandidates = [
+        `${origin}/sitemap.xml`,
+        `${origin}/sitemap_index.xml`
+      ];
+
+      for (const cand of fallbackCandidates) {
+        try {
+          const check = await axios.head(cand, {
+            headers: { 'User-Agent': ua },
+            timeout: 5000,
+            validateStatus: (status) => status < 400
+          });
+          if (check.status >= 200 && check.status < 400) {
+            discoveredSitemapUrls.push(cand);
+            break;
+          }
+        } catch {
+          // Continue to next candidate
+        }
+      }
+
+      // If head didn't catch, try the primary sitemap.xml anyway
+      if (discoveredSitemapUrls.length === 0) {
+        discoveredSitemapUrls.push(`${origin}/sitemap.xml`);
+      }
+    }
+
+    // 4. Inspect the discovered sitemaps to detect nested sitemaps
+    const sitemapDetails: Array<{
+      url: string;
+      isIndex: boolean;
+      childCount: number;
+      sampleChildren: string[];
+      hasNestedSitemaps: boolean;
+      leafUrlCount?: number;
+      error?: string;
+    }> = [];
+
+    const allNestedChildSitemaps: string[] = [];
+
+    for (const smUrl of discoveredSitemapUrls.slice(0, 5)) {
+      try {
+        const { xmlString } = await fetchSitemapXmlContent(smUrl);
+        const parsed = await parseSitemapXmlDetails(xmlString, smUrl);
+
+        if (parsed.isIndex && parsed.childSitemaps.length > 0) {
+          allNestedChildSitemaps.push(...parsed.childSitemaps);
+          sitemapDetails.push({
+            url: smUrl,
+            isIndex: true,
+            childCount: parsed.childSitemaps.length,
+            sampleChildren: parsed.childSitemaps.slice(0, 10),
+            hasNestedSitemaps: true
+          });
+        } else {
+          sitemapDetails.push({
+            url: smUrl,
+            isIndex: false,
+            childCount: 0,
+            sampleChildren: [],
+            hasNestedSitemaps: false,
+            leafUrlCount: parsed.pageUrls.length
+          });
+        }
+      } catch (err: any) {
+        sitemapDetails.push({
+          url: smUrl,
+          isIndex: false,
+          childCount: 0,
+          sampleChildren: [],
+          hasNestedSitemaps: false,
+          error: err.message || "Could not read sitemap XML"
+        });
+      }
+    }
+
+    const uniqueNested = Array.from(new Set(allNestedChildSitemaps));
+    const hasMultipleSitemaps = discoveredSitemapUrls.length > 1 || uniqueNested.length > 1;
+    const hasNestedSitemaps = uniqueNested.length > 0;
+
+    let configurationSummary = "";
+    if (robotsFound && discoveredSitemapUrls.length > 0) {
+      if (hasNestedSitemaps) {
+        configurationSummary = `Found robots.txt declaring ${discoveredSitemapUrls.length} sitemap(s) with ${uniqueNested.length} nested child sitemaps identified.`;
+      } else {
+        configurationSummary = `Found robots.txt with ${discoveredSitemapUrls.length} sitemap file(s) ready for analysis.`;
+      }
+    } else if (hasNestedSitemaps) {
+      configurationSummary = `Discovered default sitemap at ${discoveredSitemapUrls[0]} with ${uniqueNested.length} nested child sitemaps.`;
+    } else {
+      configurationSummary = `Configured to crawl ${discoveredSitemapUrls[0] || `${origin}/sitemap.xml`}.`;
+    }
+
+    res.json({
+      domain: cleanDomain,
+      origin,
+      robotsUrl,
+      robotsFound,
+      sitemapsFromRobots,
+      discoveredSitemapUrls,
+      sitemapDetails,
+      nestedSitemaps: uniqueNested,
+      hasMultipleSitemaps,
+      hasNestedSitemaps,
+      totalNestedCount: uniqueNested.length,
+      configurationSummary,
+      suggestedUrlsToCrawl: uniqueNested.length > 0 ? uniqueNested.slice(0, 50) : discoveredSitemapUrls
+    });
+  });
+
   // Concurrency worker helper for parallel thread-like execution without hitting memory/rate limits
   async function mapConcurrent<T, R>(
     items: T[],
@@ -1548,7 +1735,7 @@ async function startServer() {
 
   // Resilient content generator helper with retries and model fallbacks
   async function generateContentWithRetryAndFallback(prompt: string): Promise<any> {
-    const modelsToTry = ["gemini-3.6-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"];
+    const modelsToTry = ["gemini-3.7-flash", "gemini-3.1-flash-lite"];
     const ai = new GoogleGenAI({
       apiKey: process.env.GEMINI_API_KEY,
       httpOptions: {
@@ -1569,7 +1756,7 @@ async function startServer() {
       if (shouldSkipRemainingModels) {
         break;
       }
-      const maxRetries = 1; // Limit retries to 1 to speed up response
+      const maxRetries = 2; // Allow up to 2 retries with exponential backoff
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         const attemptStartTime = Date.now();
         try {
@@ -1644,37 +1831,33 @@ Core Logic & Rules:
           const errMsg = (err.message || "").toLowerCase();
           console.log(`[Gemini API Info] Model "${model}" failed on attempt ${attempt + 1}:`, err.message || err);
           
-          const isQuotaError = errMsg.includes("quota") || errMsg.includes("exhausted") || errMsg.includes("limit");
-          const isCapacityError = errMsg.includes("unavailable") || errMsg.includes("high demand") || errMsg.includes("overloaded");
+          const isQuotaError = errMsg.includes("quota") || errMsg.includes("exhausted") || errMsg.includes("limit") || errMsg.includes("429");
+          const isCapacityError = errMsg.includes("unavailable") || errMsg.includes("high demand") || errMsg.includes("overloaded") || errMsg.includes("503");
 
-          const isHardError = isQuotaError ||
-                              isCapacityError ||
-                              errMsg.includes("not found") || 
-                              errMsg.includes("invalid") || 
-                              errMsg.includes("not support") || 
-                              errMsg.includes("unrecognized") || 
-                              errMsg.includes("not enabled");
+          const isHardFatalError = errMsg.includes("not found") || 
+                                   errMsg.includes("invalid") || 
+                                   errMsg.includes("not support") || 
+                                   errMsg.includes("unrecognized") || 
+                                   errMsg.includes("not enabled");
           
           if (isQuotaError) {
-            console.log(`[Gemini API] Global API key quota error detected ("${errMsg}"). Skipping all subsequent models & retries for immediate failover.`);
+            console.log(`[Gemini API] Global API key quota limit reached ("${errMsg}"). Switching directly to rule-based engine.`);
             shouldSkipRemainingModels = true;
             break;
           }
 
-          if (isCapacityError) {
-            console.log(`[Gemini API] Model-specific capacity/overload error detected ("${errMsg}"). Skipping remaining retries for model "${model}" but proceeding to fallback models.`);
-            break;
-          }
-                              
-          if (isHardError) {
-            console.log(`[Gemini API] Hard error detected for model "${model}". Skipping remaining retries for this model.`);
+          if (isHardFatalError) {
+            console.log(`[Gemini API] Model parameter error on "${model}". Moving to next model.`);
             break;
           }
 
           if (attempt < maxRetries) {
-            const delay = 500;
-            console.log(`[Gemini API] Waiting ${delay}ms before retrying model "${model}"...`);
-            await sleep(delay);
+            // Exponential backoff with jitter for temporary 503 capacity spikes
+            const backoffMs = Math.min(3000, Math.pow(2, attempt) * 1000 + Math.floor(Math.random() * 400));
+            console.log(`[Gemini API] Temporary upstream demand spike (${isCapacityError ? "503 Capacity" : "Network"}). Backing off for ${backoffMs}ms before retry ${attempt + 2}...`);
+            await sleep(backoffMs);
+          } else if (isCapacityError) {
+            console.log(`[Gemini API] Model "${model}" still busy after ${maxRetries + 1} attempts. Trying fallback model...`);
           }
         }
       }
