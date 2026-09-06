@@ -40,16 +40,36 @@ export interface AuditResult {
 }
 
 function normalizeModelName(model?: string): string {
-  if (!model) return "gemini-2.5-flash";
+  if (!model) return "gemini-3.6-flash";
   const m = model.trim().toLowerCase();
-  if (m === "gemini-flash" || m === "gemini-flash-latest" || m === "gemini-2.0-flash" || m === "gemini-1.5-flash" || m === "gemini-3.8-flash") {
-    return "gemini-2.5-flash";
+  if (
+    m === "gemini-flash" ||
+    m === "gemini-flash-latest" ||
+    m === "gemini-2.0-flash" ||
+    m === "gemini-1.5-flash" ||
+    m === "gemini-2.5-flash" ||
+    m === "gemini-3.6-flash" ||
+    m === "gemini-3.8-flash"
+  ) {
+    return "gemini-3.6-flash";
   }
-  if (m === "gemini-2.5-flash-lite" || m === "gemini-flash-lite" || m === "gemini-lite" || m === "gemini-3.1-flash-lite") {
-    return "gemini-2.5-flash-lite";
+  if (
+    m === "gemini-2.5-flash-lite" ||
+    m === "gemini-flash-lite" ||
+    m === "gemini-lite" ||
+    m === "gemini-3.1-flash-lite" ||
+    m === "gemini-3.5-flash-lite"
+  ) {
+    return "gemini-3.5-flash-lite";
   }
-  if (m === "gemini-1.5-pro" || m === "gemini-pro" || m === "gemini-3.1-pro-preview") {
-    return "gemini-2.5-pro";
+  if (
+    m === "gemini-1.5-pro" ||
+    m === "gemini-pro" ||
+    m === "gemini-2.5-pro" ||
+    m === "gemini-3.1-pro-preview" ||
+    m === "gemini-3.5-pro"
+  ) {
+    return "gemini-3.5-pro";
   }
   return model;
 }
