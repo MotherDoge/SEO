@@ -6,6 +6,7 @@ on:
     paths:
       - 'schema-architect/**'
       - 'page-template-identifier/**'
+  workflow_dispatch:
 
 jobs:
   deploy-schema-architect:
@@ -27,13 +28,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
-          cache-dependency-path: 'schema-architect/package-lock.json'
 
       - name: Install Dependencies
         if: steps.check_changes.outputs.src == 'true'
         working-directory: schema-architect
-        run: npm ci
+        run: npm install
 
       - name: Build Project
         if: steps.check_changes.outputs.src == 'true'
@@ -72,13 +71,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
-          cache-dependency-path: 'page-template-identifier/package-lock.json'
 
       - name: Install Dependencies
         if: steps.check_changes.outputs.src == 'true'
         working-directory: page-template-identifier
-        run: npm ci
+        run: npm install
 
       - name: Build Project
         if: steps.check_changes.outputs.src == 'true'
