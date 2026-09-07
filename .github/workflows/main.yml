@@ -1,10 +1,10 @@
-name: Deploy Schema Architect to Basezap
+name: Deploy Page Template Identifier
 
 on:
   push:
     branches: [ main ]
     paths:
-      - 'schema-architect/**'
+      - 'page-template-identifier/**'
 
 jobs:
   build-and-deploy:
@@ -18,21 +18,25 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: 'npm'
+          cache-dependency-path: 'page-template-identifier/package-lock.json'
 
-      - name: Install & Build
-        working-directory: schema-architect
+      - name: Install Dependencies
+        working-directory: page-template-identifier
+        run: npm ci
+
+      - name: Build Project
+        working-directory: page-template-identifier
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: |
-          npm ci || npm install
-          npm run build
+        run: npm run build
 
-      - name: Upload to Basezap via FTP
+      - name: FTP Deploy to Basezap
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.FTP_SERVER }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
-          local-dir: schema-architect/dist/
-          server-dir: domains/ctrblaze.com/public_html/seo-schema-architect/
+          local-dir: page-template-identifier/dist/
+          server-dir: public_html/page-template-identifier/
           dangerous-clean-slate: false
