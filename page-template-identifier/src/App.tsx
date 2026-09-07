@@ -2048,7 +2048,7 @@ const analyzeSitemap = async () => {
                 <p className="text-xs text-gray-500 mt-0.5 font-medium">Detect and recommend schema</p>
               </div>
               <a
-                href="https://ai.studio/apps/94f6d44f-1754-4253-87b9-a34f3461dc98"
+                href="https://ctrblaze.com/seo-schema-architect/"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-[#2563EB] hover:bg-[#1D4ED8] text-white rounded-xl text-xs font-bold uppercase tracking-wider shadow-sm transition-all cursor-pointer shrink-0"
