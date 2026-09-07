@@ -24,7 +24,7 @@ export default function BulkWorkflowBanner() {
 
         <div className="shrink-0">
           <a 
-            href="https://ai.studio/apps/34f5d816-ce36-4e19-8e42-78b04d0a045c" 
+            href="https://ctrblaze.com/page-template-identifier/" 
             target="_blank" 
             rel="noopener noreferrer"
             className="inline-block w-full md:w-auto"
