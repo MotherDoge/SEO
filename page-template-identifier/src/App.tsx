@@ -1486,103 +1486,29 @@ export default function App() {
 
 
 const analyzeSitemap = async () => {
-  if (!urls.trim()) {
-    setError("Please provide at least one URL.");
-    return;
-  }
-  setIsAnalyzing(true);
-  setError(null);
-  setResult(null);
-
-  try {
-    const data = await analyzeUrlsDirectly(urls);
-    const normalizedData = normalizeResult(data);
-    setResult(normalizedData);
-    setRunHistory(prev => [{ date: new Date().toISOString(), result: normalizedData }, ...prev]);
-  } catch (err: any) {
-    console.error("Analysis failed:", err);
-    setError(err.message || "Failed to analyze URLs. Please check your input and try again.");
-  } finally {
-    setIsAnalyzing(false);
-  }
-};
-
+    if (!urls.trim()) {
+      setError("Please provide at least one URL.");
+      return;
+    }
     setIsAnalyzing(true);
     setError(null);
     setResult(null);
 
-    // Token Limit Protection: Sample URLs if the list is too long
-    const allUrls = urls.split('\n').filter(l => l.trim());
-    const MAX_URLS_FOR_ANALYSIS = 2000;
-    
-    // Sort all URLs alphabetically so that sampling is 100% deterministic
-    const sortedAllUrls = [...allUrls].sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
-    let sampledUrls = sortedAllUrls;
-    let isTruncated = false;
-
-    if (sortedAllUrls.length > MAX_URLS_FOR_ANALYSIS) {
-      // Find the homepage if it exists to ensure it's always analyzed
-      const homePage = sortedAllUrls.find(u => {
-        try {
-          const url = new URL(u);
-          return url.pathname === '/' || url.pathname === '';
-        } catch {
-          return false;
-        }
-      });
-
-      // Take a representative sample: first 1000 and last 1000 alphabetic
-      const firstPart = sortedAllUrls.slice(0, 1000);
-      const lastPart = sortedAllUrls.slice(-1000);
-      
-      sampledUrls = [...firstPart, ...lastPart];
-      
-      // Ensure homepage is in the sample if we found one
-      if (homePage && !sampledUrls.includes(homePage)) {
-        sampledUrls.unshift(homePage);
-      }
-      
-      isTruncated = true;
-    }
-
-    const urlsToAnalyze = sampledUrls.join('\n');
-
     try {
-      const response = await fetch('/api/analyze-urls', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ urlsToAnalyze })
-      });
-
-      if (!response.ok) {
-        let errorMessage = 'Failed to fetch the analysis API';
-        try {
-          const errData = await response.json();
-          errorMessage = errData.error || errorMessage;
-        } catch { }
-        throw new Error(errorMessage);
-      }
-
-      const data = await response.json();
+      const data = await analyzeUrlsDirectly(urls);
       const normalizedData = normalizeResult(data);
       setResult(normalizedData);
-      setRunHistory(prev => [{ date: new Date().toISOString(), result: normalizedData }, ...prev]);
-      
-      if (isTruncated) {
-        setError(`Note: Analyzed a representative sample of ${MAX_URLS_FOR_ANALYSIS} URLs out of ${allUrls.length.toLocaleString()} total to stay within processing limits.`);
-      }
+      setRunHistory((prev) => [
+        { date: new Date().toISOString(), result: normalizedData },
+        ...prev,
+      ]);
     } catch (err: any) {
       console.error("Analysis failed:", err);
-      if (err.message?.includes("token count exceeds")) {
-        setError("The URL list is too large for the AI to process at once. I've tried to sample it, but it's still too big. Try reducing the list manually.");
-      } else {
-        setError(err.message || "Failed to analyze URLs. Please check your input and try again.");
-      }
+      setError(
+        err.message || "Failed to analyze URLs. Please check your input and try again."
+      );
     } finally {
       setIsAnalyzing(false);
-      fetchQuotaStats();
     }
   };
 
