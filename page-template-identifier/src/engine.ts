@@ -377,14 +377,29 @@ export async function fetchAndParseSitemapDirectly(sitemapUrl: string): Promise<
     target = "https://" + target;
   }
 
-  // Use a public CORS proxy so the browser can read third-party sitemaps
+ // Use a public CORS proxy so the browser can read third-party sitemaps
   const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`;
   const res = await fetch(proxyUrl);
   if (!res.ok) throw new Error(`HTTP Error ${res.status}`);
 
   const xmlText = await res.text();
+
+  // Guard against HTML error/block pages from Cloudflare or the proxy
+  const trimmed = xmlText.trim();
+  if (trimmed.startsWith("<!DOCTYPE") || trimmed.startsWith("<html")) {
+    throw new Error(
+      "Target domain or CORS proxy returned an HTML block page (Cloudflare/Bot detection). Please enter individual URLs or sitemaps manually in the workspace."
+    );
+  }
+
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+
+  // Check for XML parsing error nodes
+  const parseError = xmlDoc.querySelector("parsererror");
+  if (parseError) {
+    throw new Error("Could not parse XML sitemap. The response was not valid XML.");
+  }
 
   const childSitemaps = Array.from(xmlDoc.querySelectorAll("sitemap > loc"))
     .map((el) => el.textContent?.trim() || "")
