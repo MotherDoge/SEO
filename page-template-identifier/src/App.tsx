@@ -1137,33 +1137,63 @@ export default function App() {
 
   // --- New Nav Menu Crawler & Gap Audit Actions ---
 
-  const handleCrawlMenu = async () => {
+const handleCrawlMenu = async () => {
     if (!homepageUrl.trim()) {
       setError("Please provide a domain or homepage URL.");
       return;
     }
-
     setIsCrawling(true);
     setError(null);
     setCrawledLinks([]);
 
     try {
-      const response = await fetch("/api/crawl-menu", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: homepageUrl }),
+      const target = homepageUrl.startsWith("http") ? homepageUrl : `https://${homepageUrl}`;
+      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(target)}`;
+      
+      const res = await fetch(proxyUrl);
+      if (!res.ok) throw new Error(`Fetch failed: HTTP ${res.status}`);
+      
+      const text = await res.text();
+      let html = text;
+      try {
+        const json = JSON.parse(text);
+        html = json.contents || text;
+      } catch (_) {}
+
+      if (html.trim().startsWith("<!DOCTYPE") && (html.includes("Just a moment...") || html.includes("cf-challenge"))) {
+        throw new Error("Target site blocked client scraping (Cloudflare challenge). Please paste URLs into Manual Discovery.");
+      }
+
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, "text/html");
+      const found: Array<{ text: string; url: string; category: string }> = [];
+      const seen = new Set<string>();
+
+      const anchors = doc.querySelectorAll("header a, nav a, footer a, [role='navigation'] a");
+      anchors.forEach((a) => {
+        const href = a.getAttribute("href");
+        const linkText = a.textContent?.trim() || "";
+        if (href && !href.startsWith("#") && !href.startsWith("javascript:") && !href.startsWith("mailto:") && !href.startsWith("tel:")) {
+          try {
+            const absolute = new URL(href, target).href;
+            if (!seen.has(absolute)) {
+              seen.add(absolute);
+              found.push({
+                text: linkText || absolute,
+                url: absolute,
+                category: a.closest("footer") ? "Footer Links" : "Header / Navigation",
+              });
+            }
+          } catch (_) {}
+        }
       });
 
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to crawl homepage menu.");
+      if (found.length === 0) {
+        throw new Error("No navigation links discovered in header/nav/footer. Please paste URLs directly in Manual Discovery.");
       }
 
-      setCrawledLinks(data.links || []);
-      // Automatically select all discovered links by default
-      if (Array.isArray(data.links)) {
-        setSelectedCrawledLinks(data.links.map((l: any) => l.url));
-      }
+      setCrawledLinks(found);
+      setSelectedCrawledLinks(found.map((l) => l.url));
       setIsCrawlModalOpen(true);
     } catch (err: any) {
       console.error(err);
@@ -1653,21 +1683,68 @@ const analyzeSitemap = async () => {
     setInspectedDomainData(null);
     setInspectStatusStep(`Inspecting ${dom.replace(/^https?:\/\//, '')}/robots.txt...`);
 
-    try {
-      const response = await fetch("/api/inspect-domain", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ domain: dom })
-      });
+   try {
+      const clean = dom.replace(/^https?:\/\//, "").replace(/\/$/, "");
+      const robotsUrl = `https://${clean}/robots.txt`;
+      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(robotsUrl)}`;
 
-      const data = await response.json();
+      let robotsText = "";
+      let robotsFound = false;
 
-      if (!response.ok) {
-        setInspectError(data.error || "Failed to inspect domain.");
-        return;
+      try {
+        const res = await fetch(proxyUrl);
+        if (res.ok) {
+          const raw = await res.text();
+          try {
+            const parsed = JSON.parse(raw);
+            robotsText = parsed.contents || "";
+          } catch (_) {
+            robotsText = raw;
+          }
+          if (robotsText && !robotsText.trim().startsWith("<!DOCTYPE")) {
+            robotsFound = true;
+          }
+        }
+      } catch (_) {}
+
+      const sitemapsFromRobots: string[] = [];
+      if (robotsFound && robotsText) {
+        const lines = robotsText.split(/\r?\n/);
+        for (const line of lines) {
+          const match = line.match(/^sitemap:\s*(https?:\/\/[^\s]+)/i);
+          if (match && match[1]) {
+            sitemapsFromRobots.push(match[1].trim());
+          }
+        }
       }
 
-      setInspectedDomainData(data);
+      const discovered = sitemapsFromRobots.length > 0 
+        ? Array.from(new Set(sitemapsFromRobots)) 
+        : [`https://${clean}/sitemap.xml`];
+
+      setInspectedDomainData({
+        domain: clean,
+        origin: `https://${clean}`,
+        robotsUrl,
+        robotsFound,
+        sitemapsFromRobots,
+        discoveredSitemapUrls: discovered,
+        sitemapDetails: discovered.map((url) => ({
+          url,
+          isIndex: url.includes("index"),
+          childCount: 0,
+          sampleChildren: [],
+          hasNestedSitemaps: false,
+        })),
+        nestedSitemaps: [],
+        hasMultipleSitemaps: discovered.length > 1,
+        hasNestedSitemaps: false,
+        totalNestedCount: 0,
+        configurationSummary: robotsFound
+          ? `Found ${discovered.length} sitemap(s) declared in robots.txt.`
+          : `No robots.txt detected; defaulted to /sitemap.xml.`,
+        suggestedUrlsToCrawl: [],
+      });
     } catch (err: any) {
       setInspectError(err.message || "Failed to connect to domain inspection service.");
     } finally {
