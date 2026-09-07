@@ -4,6 +4,11 @@
  */
 
 import { useState, useEffect, ChangeEvent } from 'react';
+import { 
+  analyzeUrlsDirectly, 
+  fetchAndParseSitemapDirectly, 
+  getDeterministicSchemaAndName 
+} from "./engine";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   Search, 
@@ -729,66 +734,35 @@ export default function App() {
   };
 
   const fetchSitemap = async () => {
-    const sitemapUrls = sitemapUrl.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
-    
-    if (sitemapUrls.length === 0) {
-      setError("Please provide at least one sitemap URL.");
-      return;
+  const sitemapUrls = sitemapUrl.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  if (sitemapUrls.length === 0) {
+    setError("Please provide at least one sitemap URL.");
+    return;
+  }
+  setIsFetching(true);
+  setError(null);
+  let allFetchedUrls: string[] = [];
+
+  try {
+    for (const smUrl of sitemapUrls) {
+      try {
+        const res = await fetchAndParseSitemapDirectly(smUrl);
+        allFetchedUrls.push(...res.urls);
+      } catch (err: any) {
+        console.warn(`Failed sitemap: ${smUrl}`, err);
+      }
     }
 
-    setIsFetching(true);
-    setError(null);
-
-    let allFetchedUrls: string[] = [];
-    let errors: string[] = [];
-    let indexFilesFound: string[] = [];
-
-    try {
-      // Execute multi-sitemap fetches in parallel with concurrency pool of 6
-      await mapConcurrent(sitemapUrls, 6, async (url) => {
-        try {
-          const response = await fetch("/api/fetch-sitemap", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ url }),
-          });
-
-          const data = await response.json();
-
-          if (!response.ok) {
-            errors.push(`${url}: ${data.error || "Failed to fetch"}`);
-            return;
-          }
-
-          if (data.type === 'index') {
-            indexFilesFound.push(url);
-            if (Array.isArray(data.urls)) {
-              allFetchedUrls.push(...data.urls);
-            }
-          } else {
-            if (Array.isArray(data.urls)) {
-              allFetchedUrls.push(...data.urls);
-            }
-          }
-        } catch (err: any) {
-          errors.push(`${url}: ${err.message}`);
-        }
-      });
-
-      if (allFetchedUrls.length > 0) {
-        const uniqueUrls = Array.from(new Set([...urls.split('\n').filter(l => l.trim()), ...allFetchedUrls])).join('\n');
-        setUrls(uniqueUrls);
-      }
-
-      if (errors.length > 0) {
-        setError(`Some sitemaps failed: ${errors.join('; ')}`);
-      } else if (indexFilesFound.length > 0) {
-        setError(`Detected ${indexFilesFound.length} Sitemap Index file(s). Sub-sitemaps have been added to the list.`);
-      }
-    } finally {
-      setIsFetching(false);
+    if (allFetchedUrls.length > 0) {
+      const combined = Array.from(new Set([...urls.split('\n').filter(Boolean), ...allFetchedUrls]));
+      setUrls(combined.join('\n'));
+    } else {
+      setError("No URLs could be parsed from the provided sitemap.");
     }
-  };
+  } finally {
+    setIsFetching(false);
+  }
+};
 
   // --- Nested Sitemap Hierarchy Extractor Handlers ---
 
@@ -1511,11 +1485,27 @@ export default function App() {
 
 
 
-  const analyzeSitemap = async () => {
-    if (!urls.trim()) {
-      setError("Please provide at least one URL.");
-      return;
-    }
+const analyzeSitemap = async () => {
+  if (!urls.trim()) {
+    setError("Please provide at least one URL.");
+    return;
+  }
+  setIsAnalyzing(true);
+  setError(null);
+  setResult(null);
+
+  try {
+    const data = await analyzeUrlsDirectly(urls);
+    const normalizedData = normalizeResult(data);
+    setResult(normalizedData);
+    setRunHistory(prev => [{ date: new Date().toISOString(), result: normalizedData }, ...prev]);
+  } catch (err: any) {
+    console.error("Analysis failed:", err);
+    setError(err.message || "Failed to analyze URLs. Please check your input and try again.");
+  } finally {
+    setIsAnalyzing(false);
+  }
+};
 
     setIsAnalyzing(true);
     setError(null);
@@ -1596,89 +1586,44 @@ export default function App() {
     }
   };
 
-  const handleInjectCustomPattern = async (patternToInject?: string) => {
-    const pat = (patternToInject || customPattern).trim();
-    if (!pat) {
-      setError("Please specify a valid URL pattern.");
-      return;
+ const handleInjectCustomPattern = async (patternToInject?: string) => {
+  const pat = (patternToInject || customPattern).trim();
+  if (!pat) {
+    setError("Please specify a valid URL pattern.");
+    return;
+  }
+  setIsInjecting(true);
+  setError(null);
+
+  try {
+    const domain = result?.domain_analyzed || "unknown-domain.com";
+    const { template_name, recommended_primary_schema } = getDeterministicSchemaAndName(pat, domain);
+    const data: Template = {
+      template_name,
+      url_pattern: pat,
+      recommended_primary_schema,
+      sample_urls: [],
+      count: 0,
+      all_matching_urls: [],
+    };
+
+    if (result) {
+      const templates = result.templates || [];
+      const exists = templates.some(t => t.url_pattern.toLowerCase() === data.url_pattern.toLowerCase());
+      const updatedTemplates = exists
+        ? templates.map(t => t.url_pattern.toLowerCase() === data.url_pattern.toLowerCase() ? data : t)
+        : [data, ...templates];
+
+      const updatedResult = { ...result, total_templates_discovered: updatedTemplates.length, templates: updatedTemplates };
+      setResult(updatedResult);
     }
-
-    setIsInjecting(true);
-    setError(null);
-
-    try {
-      const response = await fetch("/api/detect-custom-template", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          pattern: pat,
-          domain: result?.domain_analyzed || "unknown-domain.com",
-          urls: urls
-        })
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to detect pattern page type.");
-      }
-
-      if (result) {
-        const templates = result.templates || [];
-        const exists = templates.some(t => t.url_pattern.toLowerCase() === data.url_pattern.toLowerCase());
-        
-        let updatedTemplates = [...templates];
-        if (exists) {
-          updatedTemplates = templates.map(t => 
-            t.url_pattern.toLowerCase() === data.url_pattern.toLowerCase() ? data : t
-          );
-        } else {
-          updatedTemplates = [data, ...templates];
-        }
-
-        const updatedResult = {
-          ...result,
-          total_templates_discovered: updatedTemplates.length,
-          templates: updatedTemplates
-        };
-
-        setResult(updatedResult);
-        setRunHistory(prev => {
-          if (prev.length > 0) {
-            const updatedHistory = [...prev];
-            updatedHistory[0] = {
-              ...updatedHistory[0],
-              result: updatedResult
-            };
-            return updatedHistory;
-          }
-          return prev;
-        });
-
-        if (!patternToInject) {
-          setCustomPattern("");
-        }
-      } else {
-        const bootstrappedResult: AnalysisResult = {
-          domain_analyzed: "custom-injection.com",
-          total_templates_discovered: 1,
-          templates: [data],
-          reasoning: "Custom manual pattern injected by user.",
-          executive_tldr: "Custom page type added manually."
-        };
-        setResult(bootstrappedResult);
-        setRunHistory(prev => [{ date: new Date().toISOString(), result: bootstrappedResult }, ...prev]);
-        
-        if (!patternToInject) {
-          setCustomPattern("");
-        }
-      }
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message || "Failed to inject and auto-detect template.");
-    } finally {
-      setIsInjecting(false);
-    }
-  };
+    if (!patternToInject) setCustomPattern("");
+  } catch (err: any) {
+    setError(err.message || "Failed to inject template.");
+  } finally {
+    setIsInjecting(false);
+  }
+};
 
   const handleRemoveTemplate = (patternToRemove: string) => {
     if (!result) return;
