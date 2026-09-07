@@ -36,6 +36,47 @@ interface HistoryItem {
   tasks?: AuditTask[];
 }
 
+function extractUrlFromSchemaOrContent(codeContent?: string, rawValue?: string): string | null {
+  const content = codeContent || rawValue || "";
+  if (!content) return null;
+
+  const headerMatch = content.match(/URL:\s*(https?:\/\/[^\s\n]+)/i);
+  if (headerMatch && headerMatch[1]) return headerMatch[1];
+
+  try {
+    let jsonStr = content;
+    const scriptMatch = content.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/i);
+    if (scriptMatch && scriptMatch[1]) {
+      jsonStr = scriptMatch[1];
+    }
+    const parsed = JSON.parse(jsonStr.trim());
+    const nodes = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed["@graph"])
+      ? parsed["@graph"]
+      : [parsed];
+
+    for (const node of nodes) {
+      if (!node || typeof node !== "object") continue;
+      if (typeof node.url === "string" && node.url.startsWith("http")) return node.url;
+      if (typeof node["@id"] === "string" && node["@id"].startsWith("http") && !node["@id"].includes("#")) {
+        return node["@id"];
+      }
+      if (typeof node.mainEntityOfPage === "string" && node.mainEntityOfPage.startsWith("http")) {
+        return node.mainEntityOfPage;
+      }
+      if (node.mainEntityOfPage && typeof node.mainEntityOfPage["@id"] === "string" && node.mainEntityOfPage["@id"].startsWith("http")) {
+        return node.mainEntityOfPage["@id"];
+      }
+    }
+  } catch (e) {
+    const regexMatch = content.match(/"(?:url|@id|mainEntityOfPage)"\s*:\s*"(https?:\/\/[^"#\s]+)"/i);
+    if (regexMatch && regexMatch[1]) return regexMatch[1];
+  }
+
+  return null;
+}
+
 export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<AuditResult | null>(null);
@@ -73,6 +114,47 @@ export default function App() {
     }
   };
 
+function extractUrlFromSchemaOrContent(codeContent?: string, rawValue?: string): string | null {
+  const content = codeContent || rawValue || "";
+  if (!content) return null;
+
+  const headerMatch = content.match(/URL:\s*(https?:\/\/[^\s\n]+)/i);
+  if (headerMatch && headerMatch[1]) return headerMatch[1];
+
+  try {
+    let jsonStr = content;
+    const scriptMatch = content.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/i);
+    if (scriptMatch && scriptMatch[1]) {
+      jsonStr = scriptMatch[1];
+    }
+    const parsed = JSON.parse(jsonStr.trim());
+    const nodes = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed["@graph"])
+      ? parsed["@graph"]
+      : [parsed];
+
+    for (const node of nodes) {
+      if (!node || typeof node !== "object") continue;
+      if (typeof node.url === "string" && node.url.startsWith("http")) return node.url;
+      if (typeof node["@id"] === "string" && node["@id"].startsWith("http") && !node["@id"].includes("#")) {
+        return node["@id"];
+      }
+      if (typeof node.mainEntityOfPage === "string" && node.mainEntityOfPage.startsWith("http")) {
+        return node.mainEntityOfPage;
+      }
+      if (node.mainEntityOfPage && typeof node.mainEntityOfPage["@id"] === "string" && node.mainEntityOfPage["@id"].startsWith("http")) {
+        return node.mainEntityOfPage["@id"];
+      }
+    }
+  } catch (e) {
+    const regexMatch = content.match(/"(?:url|@id|mainEntityOfPage)"\s*:\s*"(https?:\/\/[^"#\s]+)"/i);
+    if (regexMatch && regexMatch[1]) return regexMatch[1];
+  }
+
+  return null;
+}
+  
   const handleAnalyze = async (data: { 
     type: "html"; 
     value: string; 
